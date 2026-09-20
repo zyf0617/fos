@@ -34,6 +34,7 @@ static void print_signed(long value) {
 
 void kprintf(const char *fmt, ...) {
     va_list ap;
+    uart_lock_acquire();
     va_start(ap, fmt);
 
     for (; *fmt; fmt++) {
@@ -73,4 +74,5 @@ void kprintf(const char *fmt, ...) {
         }
     }
     va_end(ap);
+    uart_lock_release();
 }

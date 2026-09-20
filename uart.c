@@ -3,6 +3,25 @@
 #define UART_LSR 5
 #define UART_LSR_TX_IDLE (1 << 5)
 
+static volatile unsigned int uart_lock;
+
+void uart_lock_acquire(void) {
+    unsigned int old;
+    do {
+        asm volatile("amoswap.w.aq %0, %1, (%2)"
+                     : "=r"(old)
+                     : "r"(1u), "r"(&uart_lock)
+                     : "memory");
+    } while (old != 0);
+}
+
+void uart_lock_release(void) {
+    asm volatile("amoswap.w.rl zero, zero, (%0)"
+                 :
+                 : "r"(&uart_lock)
+                 : "memory");
+}
+
 static inline unsigned char uart_read_reg(int reg) {
     return *(volatile unsigned char *)(UART0 + reg);
 }
