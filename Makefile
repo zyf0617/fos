@@ -11,7 +11,7 @@ CFLAGS += -mno-relax
 
 LDFLAGS = -z max-page-size=4096
 
-OBJS = entry.o start.o main.o uart.o
+OBJS = entry.o start.o main.o uart.o printf.o
 
 kernel.elf: $(OBJS) kernel.ld
 	$(LD) $(LDFLAGS) -T kernel.ld -o kernel.elf $(OBJS)
