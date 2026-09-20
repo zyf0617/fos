@@ -32,7 +32,7 @@ static void print_signed(long value) {
     }
 }
 
-void kprintf(const char *fmt, ...) {
+void printf(const char *fmt, ...) {
     va_list ap;
     uart_lock_acquire();
     va_start(ap, fmt);

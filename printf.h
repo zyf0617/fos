@@ -1,6 +1,6 @@
 #ifndef PRINTF_H
 #define PRINTF_H
 
-void kprintf(const char *fmt, ...);
+void printf(const char *fmt, ...);
 
 #endif
