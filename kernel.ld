@@ -1,34 +1,53 @@
-OUTPUT_ARCH(riscv)
-ENTRY(_entry)
+OUTPUT_ARCH( "riscv" )
+ENTRY( _entry )
 
-BASE_ADDRESS = 0x80000000;
+PHDRS
+{
+  text PT_LOAD FLAGS(5); /* read + execute */
+  data PT_LOAD FLAGS(6); /* read + write */
+}
 
 SECTIONS
 {
-  . = BASE_ADDRESS;
+  /* OpenSBI occupies the machine-mode firmware area from 0x80000000. */
+  . = 0x80200000;
 
   .text : {
-    *(.text.entry)
+    KEEP(*(.text.entry))
     *(.text .text.*)
-  }
+    . = ALIGN(0x1000);
+    /*
+    _trampoline = .;
+    *(trampsec)
+    . = ALIGN(0x1000);
+    ASSERT(. - _trampoline == 0x1000, "error: trampoline larger than one page");
+    */
+    PROVIDE(KERNEL_DATA = .);
+  } :text
 
-  . = ALIGN(16);
   .rodata : {
+    . = ALIGN(16);
+    *(.srodata .srodata.*) /* do not need to distinguish this from .rodata */
+    . = ALIGN(16);
     *(.rodata .rodata.*)
-  }
+  } :text
 
-  . = ALIGN(16);
   .data : {
-    *(.sdata .sdata.*)
+    . = ALIGN(16);
+    *(.sdata .sdata.*) /* do not need to distinguish this from .data */
+    . = ALIGN(16);
     *(.data .data.*)
-  }
+  } :data
 
-  . = ALIGN(16);
   .bss : {
-    *(.sbss .sbss.*)
+    . = ALIGN(16);
+    *(.sbss .sbss.*) /* do not need to distinguish this from .bss */
+    . = ALIGN(16);
     *(.bss .bss.*)
-    *(COMMON)
-  }
+  } :data
 
-  PROVIDE(end = .);
+  . = ALIGN(4096);
+  PROVIDE(ALLOC_BEGIN = .);
+  /* QEMU RAM is 130 MiB from 0x80000000; leave the first 2 MiB for OpenSBI. */
+  PROVIDE(ALLOC_END = 0x80200000 + 128M);
 }
