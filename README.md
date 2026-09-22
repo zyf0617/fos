@@ -1,5 +1,32 @@
 # LAB-2: 内存管理初步
 
+## 实现状态
+
+本分支已完成 Lab 2 的三条主线：
+
+- 使用 OpenSBI 在 S-mode 启动，并通过 SBI HSM 扩展启动第二个 hart；
+- 将可分配物理内存分为内核页池和用户页池，用带自旋锁的空闲链表管理；
+- 实现 Sv39 三级页表遍历、映射、解映射和内核恒等映射。
+
+构建与运行：
+
+```bash
+source /media/psf/Home/Desktop/操作系统/work/env.sh
+make clean
+make build
+make run
+```
+
+启动后的关键输出应包含：
+
+```text
+cpu 0 is booting with OpenSBI!
+lab-2 memory self-test passed
+cpu 1 is booting with OpenSBI!
+```
+
+内存自检位于 `src/kernel/mem/test.c`，覆盖物理页对齐与重用清零，以及用户页的映射、PTE 校验、解映射和回收。
+
 **前言**
 
 在lab-1中, 我们学习了机器启动流程、UART设备驱动、格式化输出和自旋锁

@@ -22,7 +22,7 @@ static void printint(int xx, int base, int sign)
     uint32 x;
 
     if (sign && (sign = xx < 0))
-        x = -xx;
+        x = (uint32)(-(int64)xx);
     else
         x = xx;
 
@@ -59,6 +59,58 @@ static void printptr(uint64 x)
 */
 void printf(const char *fmt, ...)
 {
+    va_list ap;
+
+    spinlock_acquire(&print_lk);
+    va_start(ap, fmt);
+
+    for (; *fmt != '\0'; fmt++)
+    {
+        if (*fmt != '%')
+        {
+            uart_putc_sync(*fmt);
+            continue;
+        }
+
+        fmt++;
+        if (*fmt == '\0')
+            break;
+
+        switch (*fmt)
+        {
+        case 'd':
+            printint(va_arg(ap, int), 10, 1);
+            break;
+        case 'x':
+            printint(va_arg(ap, int), 16, 0);
+            break;
+        case 'p':
+            printptr(va_arg(ap, uint64));
+            break;
+        case 'c':
+            uart_putc_sync(va_arg(ap, int));
+            break;
+        case 's':
+        {
+            const char *s = va_arg(ap, const char *);
+            if (s == NULL)
+                s = "(null)";
+            while (*s != '\0')
+                uart_putc_sync(*s++);
+            break;
+        }
+        case '%':
+            uart_putc_sync('%');
+            break;
+        default:
+            uart_putc_sync('%');
+            uart_putc_sync(*fmt);
+            break;
+        }
+    }
+
+    va_end(ap);
+    spinlock_release(&print_lk);
 }
 
 /* 如果发生panic, UART的停止标志 */
@@ -76,4 +128,6 @@ void panic(const char *s)
 /* 如果不满足条件, 则调用panic */
 void assert(bool condition, const char *warning)
 {
+    if (!condition)
+        panic(warning);
 }

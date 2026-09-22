@@ -14,3 +14,7 @@ void vm_unmappages(pgtbl_t pgtbl, uint64 va, uint64 len, bool freeit);
 void vm_print(pgtbl_t pgtbl);
 void kvm_init();
 void kvm_inithart();
+
+/* test.c: Lab 2内存管理自检 */
+
+void mem_self_test(void);

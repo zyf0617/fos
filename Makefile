@@ -1,6 +1,18 @@
 # 引入通用配置文件
 include common.mk
 
+.DEFAULT_GOAL := build
+
+# 自动选择当前环境里已安装的RISC-V交叉工具链。
+# 仍可在命令行中用TOOLPREFIX=...显式覆盖。
+DETECTED_TOOLPREFIX := $(shell \
+	for p in riscv64-linux-gnu- riscv64-unknown-elf- riscv64-elf- riscv64-none-elf-; do \
+		if command -v $${p}gcc >/dev/null 2>&1; then echo $$p; break; fi; \
+	done)
+ifneq ($(DETECTED_TOOLPREFIX),)
+TOOLPREFIX = $(DETECTED_TOOLPREFIX)
+endif
+
 # 配置CPU核心数量
 CPUNUM = 2
 # 定义目标文件输出目录
@@ -26,16 +38,23 @@ KernelOBJ += $(patsubst $(KernelPath)/%.c, $(TARGET)/kernel/%.o, $(filter %.c, $
 UserOBJ = $(patsubst $(UserPath)/%.c, $(TARGET)/user/%.o, $(filter %.c, $(UserSourceFile)))
 
 # QEMU模拟器配置
-QEMU     = qemu-system-riscv64  # 指定QEMU程序
-QEMUOPTS = -machine virt -bios default -kernel $(ELFKernel)  # 使用OpenSBI启动S-mode内核
+# 指定QEMU程序
+QEMU = qemu-system-riscv64
+LOCAL_OPENSBI = ../toolchain/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_dynamic.bin
+OPENSBI ?= $(if $(wildcard $(LOCAL_OPENSBI)),$(LOCAL_OPENSBI),default)
+QEMUOPTS = -machine virt -bios $(OPENSBI) -kernel $(ELFKernel)  # 使用OpenSBI启动S-mode内核
 QEMUOPTS += -m 130M -smp $(CPUNUM) -nographic  # 物理内存从0x80000000到0x88200000
 
 # 调试相关配置
-GDBPORT = $(shell expr `id -u` % 5000 + 25000)  # 动态计算GDB端口号
+# 动态计算GDB端口号
+GDBPORT = $(shell expr `id -u` % 5000 + 25000)
 # 根据QEMU版本选择合适的GDB调试参数
 QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 	then echo "-gdb tcp::$(GDBPORT)"; \
 	else echo "-s -p $(GDBPORT)"; fi)
+
+# 引入编译器生成的头文件依赖，修改头文件后能正确触发重编译。
+-include $(KernelOBJ:.o=.d) $(UserOBJ:.o=.d)
 
 # 生成GDB初始化文件
 .gdbinit: .gdbinit.tmpl-riscv
@@ -85,3 +104,5 @@ $(ELFKernel): $(KernelOBJ) $(UserOBJ)
 .PHONY: clean
 clean:
 	rm -rf target
+
+.PHONY: build run debug clean

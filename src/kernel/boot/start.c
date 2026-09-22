@@ -11,7 +11,13 @@ void start(uint64 hartid)
     w_satp(0);
     sfence_vma();
 
-    // OpenSBI通过a0传入hartid,也就是当前函数的输入参数hartid，我们可以直接使用他,内核继续用tp保存它。
+    // OpenSBI通过a0传入hartid，内核统一用tp保存当前CPU编号。
+    w_tp(hartid);
 
     // 进入main函数
+    main();
+
+    // main不应返回，作为防御性处理让当前CPU停在低功耗状态。
+    while (1)
+        asm volatile("wfi");
 }

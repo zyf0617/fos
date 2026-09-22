@@ -13,9 +13,9 @@ void main(void)
     if (hartid == 0)
     {
         print_init();
+        printf("cpu %d is booting with OpenSBI!\n", (int)hartid);
         pmem_init();
         kvm_init();
-        kvm_inithart();
         __sync_synchronize();
         initialized = 1;
 
@@ -37,6 +37,12 @@ void main(void)
         __sync_synchronize();
         printf("cpu %d is booting with OpenSBI!\n", (int)hartid);
     }
+
+    // satp是每个CPU独有的CSR，所以所有CPU都要切换到共享内核页表。
+    kvm_inithart();
+
+    if (hartid == 0)
+        mem_self_test();
 
     while (1)
         asm volatile("wfi");
