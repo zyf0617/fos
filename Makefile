@@ -45,6 +45,11 @@ OPENSBI ?= $(if $(wildcard $(LOCAL_OPENSBI)),$(LOCAL_OPENSBI),default)
 QEMUOPTS = -machine virt -bios $(OPENSBI) -kernel $(ELFKernel)  # 使用OpenSBI启动S-mode内核
 QEMUOPTS += -m 130M -smp $(CPUNUM) -nographic  # 物理内存从0x80000000到0x88200000
 
+# QEMU 中的内核会在自检完成后继续等待中断，因此自动测试
+# 使用有界超时结束运行，再对串口日志做断言。
+TEST_TIMEOUT ?= 10
+TEST_LOG = $(TARGET)/lab2-test.log
+
 # 调试相关配置
 # 动态计算GDB端口号
 GDBPORT = $(shell expr `id -u` % 5000 + 25000)
@@ -63,6 +68,20 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 # 运行目标：先构建再启动QEMU
 run: build
 	$(QEMU) $(QEMUOPTS)
+
+# 可重复的 Lab 2 启动与内存回归测试。
+test: build
+	@set -eu; \
+	status=0; \
+	timeout $(TEST_TIMEOUT)s $(QEMU) $(QEMUOPTS) > $(TEST_LOG) 2>&1 || status=$$?; \
+	if [ $$status -ne 0 ] && [ $$status -ne 124 ]; then \
+		cat $(TEST_LOG); \
+		exit $$status; \
+	fi; \
+	grep -Fq "cpu 0 is booting with OpenSBI!" $(TEST_LOG); \
+	grep -Fq "cpu 1 is booting with OpenSBI!" $(TEST_LOG); \
+	grep -Fq "lab-2 memory self-test passed" $(TEST_LOG); \
+	echo "Lab 2 QEMU test passed"
 
 # 调试目标：启动带GDB调试的QEMU
 debug: $(ELFKernel) .gdbinit
@@ -105,4 +124,4 @@ $(ELFKernel): $(KernelOBJ) $(UserOBJ)
 clean:
 	rm -rf target
 
-.PHONY: build run debug clean
+.PHONY: build run test debug clean

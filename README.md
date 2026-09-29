@@ -11,11 +11,21 @@
 构建与运行：
 
 ```bash
-source /media/psf/Home/Desktop/操作系统/work/env.sh
+source ../env.sh
 make clean
 make build
 make run
 ```
+
+可重复执行的启动与内存回归测试：
+
+```bash
+source ../env.sh
+make test
+```
+
+`make test` 会在有界时间内启动 QEMU，检查两个 hart 的启动日志以及
+Lab 2 内存自检通过标志，日志保存于 `target/lab2-test.log`。
 
 启动后的关键输出应包含：
 

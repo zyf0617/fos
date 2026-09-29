@@ -3,3 +3,11 @@ target/
 ._*
 *~
 .gdbinit
+*.o
+*.d
+*.elf
+*.asm
+*.sym
+*.img
+.vscode/
+.picture/
