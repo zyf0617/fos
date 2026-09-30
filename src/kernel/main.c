@@ -5,13 +5,15 @@
 //_entry在kernel.ld中定义 将后续hart中的启动地址定义为该地址
 extern void _entry(void);
 
-static volatile int initialized = 0;
+// OpenSBI可以选择任意hart作为boot hart，不能假定一定是CPU-0。
+// 0=未开始，1=全局初始化中，2=全局初始化完成。
+static volatile int init_state = 0;
 
 void main(void)
 {
     uint64 hartid = r_tp();
 
-    if (hartid == 0)
+    if (__sync_bool_compare_and_swap(&init_state, 0, 1))
     {
         print_init();
         printf("cpu %d is booting with OpenSBI!\n", (int)hartid);
@@ -19,10 +21,14 @@ void main(void)
         kvm_init();
         trap_kernel_init();
         __sync_synchronize();
-        initialized = 1;
+        init_state = 2;
 
-        for (uint64 id = 1; id < NCPU; id++)
+        // 实际boot hart已在运行，通过HSM启动其余所有hart。
+        for (uint64 id = 0; id < NCPU; id++)
         {
+            if (id == hartid)
+                continue;
+
             sbi_ret_t ret = sbi_hart_start(id, (uint64)_entry, 0);
             if (ret.error != SBI_SUCCESS)
             {
@@ -34,7 +40,7 @@ void main(void)
     }
     else
     {
-        while (!initialized)
+        while (init_state != 2)
             ;
         __sync_synchronize();
         printf("cpu %d is booting with OpenSBI!\n", (int)hartid);
