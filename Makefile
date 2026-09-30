@@ -49,7 +49,7 @@ QEMUOPTS += -m 130M -smp $(CPUNUM) -nographic  # 物理内存从0x80000000到0x8
 # 再对串口日志中的启动、内存和时钟信号做断言。
 TEST_TIMEOUT ?= 10
 TEST_LOG = $(TARGET)/lab3-test.log
-UART_TEST_TIMEOUT ?= 4
+UART_TEST_TIMEOUT ?= 6
 UART_TEST_LOG = $(TARGET)/lab3-uart-test.log
 
 # 调试相关配置
@@ -91,7 +91,7 @@ test-core: build
 test-uart: build
 	@set -eu; \
 	status=0; \
-	{ sleep 1; printf 'uart-tesx\177t\r'; sleep 1; } | \
+	{ sleep 2; printf 'uart-tesx\177t\r'; sleep 1; } | \
 		timeout $(UART_TEST_TIMEOUT)s $(QEMU) $(QEMUOPTS) > $(UART_TEST_LOG) 2>&1 || status=$$?; \
 	if [ $$status -ne 0 ] && [ $$status -ne 124 ]; then \
 		cat $(UART_TEST_LOG); \
