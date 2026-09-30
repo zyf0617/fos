@@ -45,10 +45,12 @@ OPENSBI ?= $(if $(wildcard $(LOCAL_OPENSBI)),$(LOCAL_OPENSBI),default)
 QEMUOPTS = -machine virt -bios $(OPENSBI) -kernel $(ELFKernel)  # 使用OpenSBI启动S-mode内核
 QEMUOPTS += -m 130M -smp $(CPUNUM) -nographic  # 物理内存从0x80000000到0x88200000
 
-# QEMU 中的内核会在自检完成后继续等待中断，因此自动测试
-# 使用有界超时结束运行，再对串口日志做断言。
+# QEMU 中的内核会持续等待中断，因此自动测试使用有界超时，
+# 再对串口日志中的启动、内存和时钟信号做断言。
 TEST_TIMEOUT ?= 10
-TEST_LOG = $(TARGET)/lab2-test.log
+TEST_LOG = $(TARGET)/lab3-test.log
+UART_TEST_TIMEOUT ?= 4
+UART_TEST_LOG = $(TARGET)/lab3-uart-test.log
 
 # 调试相关配置
 # 动态计算GDB端口号
@@ -69,8 +71,8 @@ QEMUGDB = $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 run: build
 	$(QEMU) $(QEMUOPTS)
 
-# 可重复的 Lab 2 启动与内存回归测试。
-test: build
+# 可重复的 Lab 3 启动、内存与时钟中断回归测试。
+test-core: build
 	@set -eu; \
 	status=0; \
 	timeout $(TEST_TIMEOUT)s $(QEMU) $(QEMUOPTS) > $(TEST_LOG) 2>&1 || status=$$?; \
@@ -81,7 +83,25 @@ test: build
 	grep -Fq "cpu 0 is booting with OpenSBI!" $(TEST_LOG); \
 	grep -Fq "cpu 1 is booting with OpenSBI!" $(TEST_LOG); \
 	grep -Fq "lab-2 memory self-test passed" $(TEST_LOG); \
-	echo "Lab 2 QEMU test passed"
+	grep -Fq "lab-3 timer interrupt test passed" $(TEST_LOG); \
+	if grep -Fq "panic!" $(TEST_LOG); then cat $(TEST_LOG); exit 1; fi; \
+	echo "Lab 3 core QEMU test passed"
+
+# 通过QEMU串口注入普通字符、Delete/Backspace和回车，验证PLIC外部中断链路。
+test-uart: build
+	@set -eu; \
+	status=0; \
+	{ sleep 1; printf 'uart-tesx\177t\r'; sleep 1; } | \
+		timeout $(UART_TEST_TIMEOUT)s $(QEMU) $(QEMUOPTS) > $(UART_TEST_LOG) 2>&1 || status=$$?; \
+	if [ $$status -ne 0 ] && [ $$status -ne 124 ]; then \
+		cat $(UART_TEST_LOG); \
+		exit $$status; \
+	fi; \
+	grep -Fq "$$(printf 'uart-tesx\b \bt')" $(UART_TEST_LOG); \
+	if grep -Fq "panic!" $(UART_TEST_LOG); then cat $(UART_TEST_LOG); exit 1; fi; \
+	echo "Lab 3 UART interrupt test passed"
+
+test: test-core test-uart
 
 # 调试目标：启动带GDB调试的QEMU
 debug: $(ELFKernel) .gdbinit
@@ -124,4 +144,4 @@ $(ELFKernel): $(KernelOBJ) $(UserOBJ)
 clean:
 	rm -rf target
 
-.PHONY: build run test debug clean
+.PHONY: build run test test-core test-uart debug clean

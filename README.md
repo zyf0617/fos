@@ -1,12 +1,14 @@
-# LAB-2: 内存管理初步
+# AegisOS LAB-3：中断与异常初步
 
 ## 实现状态
 
-本分支已完成 Lab 2 的三条主线：
+本分支在 Lab 2 内存基础上完成 Lab 3：
 
-- 使用 OpenSBI 在 S-mode 启动，并通过 SBI HSM 扩展启动第二个 hart；
-- 将可分配物理内存分为内核页池和用户页池，用带自旋锁的空闲链表管理；
-- 实现 Sv39 三级页表遍历、映射、解映射和内核恒等映射。
+- 安装 S-mode 内核 trap 入口，保存并恢复完整通用寄存器上下文；
+- 通过 PLIC 识别 UART 外部中断，支持字符、换行和 Backspace 回显；
+- 通过 SBI TIME 扩展为每个 hart 设置定时事件；
+- 由 CPU-0 在自旋锁保护下维护全局 ticks；
+- 保留 Lab 2 的物理内存和 Sv39 回归自检。
 
 构建与运行：
 
@@ -24,8 +26,10 @@ source ../env.sh
 make test
 ```
 
-`make test` 会在有界时间内启动 QEMU，检查两个 hart 的启动日志以及
-Lab 2 内存自检通过标志，日志保存于 `target/lab2-test.log`。
+`make test` 会执行两次有界 QEMU 测试：第一次检查双 hart启动、Lab 2 内存自检和
+Lab 3 真实时钟中断；第二次向串口注入字符、Delete/Backspace 和回车，验证
+PLIC/UART 外部中断链路。两次测试均会确认未发生 panic，日志保存于
+`target/lab3-test.log` 和 `target/lab3-uart-test.log`。
 
 启动后的关键输出应包含：
 
@@ -33,9 +37,19 @@ Lab 2 内存自检通过标志，日志保存于 `target/lab2-test.log`。
 cpu 0 is booting with OpenSBI!
 lab-2 memory self-test passed
 cpu 1 is booting with OpenSBI!
+ticks = 1
+ticks = 2
+ticks = 3
+lab-3 timer interrupt test passed
 ```
 
-内存自检位于 `src/kernel/mem/test.c`，覆盖物理页对齐与重用清零，以及用户页的映射、PTE 校验、解映射和回收。
+内存自检位于 `src/kernel/mem/test.c`；中断入口和分发位于
+`src/kernel/trap/trap.S` 与 `src/kernel/trap/trap_kernel.c`。运行 `make run`后也可手工输入字符，
+观察 UART 回显、换行和 Backspace。
+
+---
+
+## Lab 2 参考记录
 
 **前言**
 
