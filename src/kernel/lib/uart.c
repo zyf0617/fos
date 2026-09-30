@@ -24,8 +24,8 @@ void uart_init(void)
 	// 清零和使能FIFO模式
 	WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
 
-	// 使能输出队列和接收队列的中断
-	WriteReg(IER, IER_TX_ENABLE | IER_RX_ENABLE);
+	// 当前是同步输出，只需要RX中断。持续开启TX空中断会造成中断风暴。
+	WriteReg(IER, IER_RX_ENABLE);
 }
 
 // 单个字符输出
@@ -66,7 +66,24 @@ void uart_intr(void)
 	{
 		int c = uart_getc_sync();
 		if (c == -1)
-		break;
-		uart_putc_sync(c);
+			break;
+
+		if (c == '\r' || c == '\n')
+		{
+			// 将不同终端的行结束符统一回显为CRLF。
+			uart_putc_sync('\r');
+			uart_putc_sync('\n');
+		}
+		else if (c == '\b' || c == 0x7f)
+		{
+			// 先退一格、擦除原字符，再退回编辑位置。
+			uart_putc_sync('\b');
+			uart_putc_sync(' ');
+			uart_putc_sync('\b');
+		}
+		else
+		{
+			uart_putc_sync(c);
+		}
 	}
 }

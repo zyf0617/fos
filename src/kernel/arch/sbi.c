@@ -27,3 +27,10 @@ sbi_ret_t sbi_hart_start(uint64 hartid, uint64 start_addr, uint64 opaque)
   return sbi_ecall(SBI_EXT_HSM, SBI_HSM_HART_START,
                    hartid, start_addr, opaque, 0, 0, 0);
 }
+
+// 设置当前hart的下一次时钟事件。stime_value是绝对时间。
+sbi_ret_t sbi_set_timer(uint64 stime_value)
+{
+  return sbi_ecall(SBI_EXT_TIME, SBI_TIME_SET_TIMER,
+                   stime_value, 0, 0, 0, 0, 0);
+}
