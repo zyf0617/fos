@@ -18,3 +18,6 @@ void trap_kernel_inithart(void);
 void trap_kernel_handler(void);
 void external_interrupt_handler(void);
 void timer_interrupt_handler(void);
+
+void trap_user_handler(void) __attribute__((noreturn));
+void trap_user_return(void) __attribute__((noreturn));

@@ -35,6 +35,9 @@ static const char *const exception_info[] = {
 };
 
 extern void kernel_vector(void);
+#ifdef LAB4_TEST
+uint64 lab4_user_uart_interrupts;
+#endif
 
 static const char *cause_description(const char *const *descriptions,
                                      uint64 count, uint64 cause)
@@ -115,6 +118,10 @@ void external_interrupt_handler(void)
     if (irq == UART_IRQ)
     {
         uart_intr();
+#ifdef LAB4_TEST
+        if (myproc() != NULL)
+            lab4_user_uart_interrupts++;
+#endif
     }
     else if (irq != 0)
     {

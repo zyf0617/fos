@@ -2,6 +2,12 @@
 
 // 内核空间和用户空间的可分配物理页分开描述
 static alloc_region_t kern_region, user_region;
+// 每页的所有权位受其所在区域锁保护，重复释放不能破坏空闲链表。
+static uint8 allocated[PHYS_MEM_SIZE / PGSIZE];
+#ifdef LAB4_TEST
+static int fail_after = -1;
+void pmem_test_fail_after(int count) { fail_after = count; }
+#endif
 
 static void region_init(alloc_region_t *region, uint64 begin, uint64 end,
                         char *name)
@@ -20,6 +26,7 @@ static void region_init(alloc_region_t *region, uint64 begin, uint64 end,
     for (uint64 address = begin; address < end; address += PGSIZE)
     {
         page_node_t *page = (page_node_t *)address;
+        memset(page, 1, PGSIZE);
         page->next = region->list_head.next;
         region->list_head.next = page;
         region->allocable++;
@@ -39,7 +46,7 @@ void pmem_init(void)
     uint64 alloc_end = (uint64)ALLOC_END;
     uint64 kernel_end = alloc_begin + KERN_PAGES * PGSIZE;
 
-    assert(kernel_end >= alloc_begin && kernel_end <= alloc_end,
+    assert(kernel_end >= alloc_begin && kernel_end < alloc_end,
            "pmem_init: invalid kernel region");
 
     region_init(&kern_region, alloc_begin, kernel_end, "pmem.kernel");
@@ -47,24 +54,35 @@ void pmem_init(void)
 }
 
 // 尝试返回一个可分配的清零后的物理页
-// 失败则panic锁死
+// 资源不足返回NULL，由调用者决定恢复或终止启动。
 void *pmem_alloc(bool in_kernel)
 {
     alloc_region_t *region = select_region(in_kernel);
     page_node_t *page;
 
     spinlock_acquire(&region->lk);
+#ifdef LAB4_TEST
+    if (fail_after == 0)
+    {
+        spinlock_release(&region->lk);
+        return NULL;
+    }
+    if (fail_after > 0)
+        fail_after--;
+#endif
     page = region->list_head.next;
     if (page != NULL)
     {
         region->list_head.next = page->next;
         region->allocable--;
+        uint64 index = ((uint64)page - PHYS_MEM_BASE) / PGSIZE;
+        assert(!allocated[index], "pmem_alloc: already allocated");
+        allocated[index] = 1;
     }
     spinlock_release(&region->lk);
 
     if (page == NULL)
-        panic(in_kernel ? "pmem_alloc: kernel pages exhausted"
-                        : "pmem_alloc: user pages exhausted");
+        return NULL;
 
     memset(page, 0, PGSIZE);
 
@@ -82,9 +100,27 @@ void pmem_free(uint64 page, bool in_kernel)
            "pmem_free: page outside selected region");
 
     spinlock_acquire(&region->lk);
+    uint64 index = (page - PHYS_MEM_BASE) / PGSIZE;
+    assert(allocated[index], "pmem_free: double free");
+    allocated[index] = 0;
+    memset((void *)page, 1, PGSIZE);
     page_node_t *node = (page_node_t *)page;
     node->next = region->list_head.next;
     region->list_head.next = node;
     region->allocable++;
     spinlock_release(&region->lk);
+}
+
+bool check_inkernel(uint64 page)
+{
+    return page >= kern_region.begin && page < kern_region.end;
+}
+
+uint32 pmem_available(bool in_kernel)
+{
+    alloc_region_t *region = select_region(in_kernel);
+    spinlock_acquire(&region->lk);
+    uint32 count = region->allocable;
+    spinlock_release(&region->lk);
+    return count;
 }

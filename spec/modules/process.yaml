@@ -1,5 +1,6 @@
 module: kernel/process
 owns:
+- src/kernel/lib/cpu.c
 - src/kernel/proc/proc.c
 - src/kernel/proc/swtch.S
 - src/kernel/proc/type.h

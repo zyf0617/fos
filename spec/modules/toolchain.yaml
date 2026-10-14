@@ -12,7 +12,7 @@ rules:
 - QEMU提供130MiB物理内存，内核只管理[0x80200000, 0x88200000)的128MiB，不覆盖OpenSBI。
 - 用户 main 使用显式入口段及链接脚本从 USER_BASE=0x1000 开始；无编译优化或重排参数依赖。
 targets:
-  all:
+  build:
     pre:
     - POSIX make/sh、RISC-V GCC/binutils、xxd 可用。
     effects:
@@ -29,6 +29,6 @@ targets:
     - 用 QEMU virt、130MiB内存、-bios default和所选CPUNUM启动该镜像，OpenSBI在S-mode跳转到内核，串口连接标准输入输出。
   clean:
     effects:
-    - 移除 target 与根目录生成镜像。
+    - 移除所选 TARGET 目录与其生成的 initcode.h。
     post:
-    - 删除本仓库构建产物，保留源码、规格和无关文件。
+    - 删除所选 TARGET 构建产物，保留源码、规格和无关文件。

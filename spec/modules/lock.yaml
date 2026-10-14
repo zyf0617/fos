@@ -23,7 +23,7 @@ functions:
     effects:
       - 关闭当前 hart 的 SSTATUS.SIE，最外层保存原使能状态并增加嵌套深度。
     post:
-      - SIE 为零；已有外层保存状态不变；非法 hart ID 或深度溢出属于不变量破坏并 panic。
+      - SIE 为零；已有外层保存状态不变；非法 hart ID属于不变量破坏并 panic。
   "void pop_off(void);":
     effects:
       - 将当前 hart 嵌套深度减少一层。

@@ -12,18 +12,18 @@ state:
   PLIC: 0x0c000000的外部中断控制器；UART_IRQ为10。
   kernel_vector_frame: 内核栈上的256字节保存区，通用寄存器偏移与trap.S一致；sepc、sstatus由C处理函数从CSR读取。
 rules:
-- timer_create与PLIC全局初始化只由hart0执行一次；timer_init由每个hart在S-mode本地trap入口准备好后执行一次。
-- INTERVAL是正的硬件时间计数间隔，当前为1000000；system_timer.ticks计数hart0已处理的时钟中断，不等同于墙钟时间。
-- OpenSBI在到期时向目标hart交付S-mode时钟中断；处理程序必须再次调用sbi_set_timer(r_time()+INTERVAL)，不使用M-mode timer_vector或SSIP转发。
+- timer_create与PLIC全局初始化只由实际 boot hart 执行一次；timer_init 由每个 hart 在全局中断关闭时设置第一次事件，随后 trap_kernel_inithart 安装入口并开启中断。
+- TIMER_INTERVAL是正的硬件时间计数间隔，当前为1000000；system_timer.ticks计数hart0已处理的时钟中断，不等同于墙钟时间。
+- OpenSBI在到期时向目标hart交付S-mode时钟中断；处理程序必须再次调用sbi_set_timer(r_time()+TIMER_INTERVAL)，不使用M-mode timer_vector或SSIP转发。
 - PLIC claim返回非零IRQ后，同一hart处理完毕恰好complete一次；零表示无可领取源，不complete。
 - 内核trap进入C处理函数时SSTATUS.SIE关闭；kernel_vector恢复其保存的通用寄存器并以sret返回。
 - 用户trap入口由usertrap模块管理；用户态收到时钟或外部中断时复用本模块的设备处理逻辑。
 functions:
   "void timer_init(void);":
     pre:
-    - 当前在S-mode，OpenSBI TIME扩展可用，stvec已指向有效入口，当前hart ID位于0..NCPU-1。
+    - 当前在S-mode，OpenSBI TIME扩展可用，SSTATUS.SIE 关闭，当前hart ID位于0..NCPU-1。
     effects:
-    - 调用sbi_set_timer(r_time()+INTERVAL)设置当前hart的首次绝对时间事件。
+    - 调用sbi_set_timer(r_time()+TIMER_INTERVAL)设置当前hart的首次绝对时间事件。
     - 在保留sie其他位的同时设置SIE_STIE。
     post:
     - 当前hart可接收S-mode时钟中断；不会初始化或递增共享ticks，也不直接访问CLINT。
@@ -59,10 +59,10 @@ functions:
     pre:
     - 全局PLIC初始化完成，tp为0..NCPU-1内的hart ID。
     effects:
-    - 向当前hart的S enable地址PLIC+0x2080+hart*0x100写入1<<10。
+    - 向当前hart的S enable地址PLIC+0x2080+hart*0x100写入 hart0 ? 1<<10 : 0；UART 只路由到运行首进程的 hart0。
     - 向S threshold地址PLIC+0x201000+hart*0x2000写入0。
     post:
-    - 当前hart的监督者PLIC context可领取UART中断，其他源未使能。
+    - 仅 hart0 的监督者 PLIC context 可领取 UART 中断，其他 hart 不领取该源。
   "int plic_claim(void);":
     pre:
     - 当前hart的监督者PLIC context已初始化。
@@ -90,10 +90,10 @@ functions:
     effects:
     - 初始化当前hart的PLIC context，把stvec设为kernel_vector，设置sie.SEIE并开启SSTATUS.SIE。
     post:
-    - 当前hart可处理UART外部中断；timer_init随后设置sie.STIE并安排首次时钟事件。
+    - 当前 hart 可处理已路由的外部中断和 timer_init 已安排的时钟中断。
   "void timer_interrupt_handler(void);":
     effects:
-    - 通过sbi_set_timer(r_time()+INTERVAL)设置当前hart的下一次时钟事件；当前hart为0时调用timer_update。
+    - 通过sbi_set_timer(r_time()+TIMER_INTERVAL)设置当前hart的下一次时钟事件；当前hart为0时调用timer_update。
     post:
     - 本次到期事件已重新安排；只有hart0对共享ticks贡献一次递增。
   "void external_interrupt_handler(void);":
@@ -117,4 +117,4 @@ functions:
     - sp减少256，按trap.S中的固定偏移保存通用寄存器，调用trap_kernel_handler，然后恢复现场。
     post:
     - ra偏移0，帧基址形式的sp偏移8，gp偏移16，tp偏移24，a0偏移72，t6偏移240。
-    - tp不从保存区恢复，保持内核hart ID；其余已保存寄存器恢复，sp增加256后通过sret返回。
+    - tp 从保存区恢复，保持原内核 hart ID；其余已保存寄存器恢复，sp增加256后通过sret返回。

@@ -1,5 +1,6 @@
 #pragma once
 #include "../arch/type.h"
+#include "../proc/type.h"
 #include <stdarg.h>
 
 // the UART control registers.
@@ -36,4 +37,6 @@ typedef struct cpu
 {
     int noff;   // 关中断的深度
     int origin; // 第一次关中断前的状态
+    proc_t *proc;
+    context_t ctx;
 } cpu_t;

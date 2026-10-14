@@ -18,14 +18,7 @@ functions:
       - 禁用 IER；设置 DLAB，分频低字节 3、高字节 0，再切换为 8 数据位、无校验、1 停止位。
       - 向 FCR 写入 7，启用并清空收发 FIFO。
     post:
-      - UART 可供轮询收发，接收中断仍关闭。
-  "void uart_enable_rx_interrupt(void);":
-    pre:
-      - UART 已初始化，PLIC 和监督者接收处理路径已准备好。
-    effects:
-      - 向 IER 写入 1。
-    post:
-      - UART 接收数据可产生中断。
+      - UART 可供轮询收发，IER_RX_ENABLE 已开启，但全局 SIE 和 PLIC 路由要在初始化后才启用。
   "void uart_putc_sync(int c);":
     effects:
       - 轮询 LSR 位 5，发送器可接受数据后向 THR 写入 c 的低 8 位。
@@ -38,7 +31,7 @@ functions:
       - 有数据返回 0..255；无数据立即返回 -1。
   "void uart_intr(void);":
     effects:
-      - 持续读取当前可用接收字节并通过 printf 回显。
+      - 持续读取当前可用接收字节并通过 uart_putc_sync 回显。
     post:
       - 退格 0x08 和删除 0x7f 各输出字节序列 0x08、0x20、0x08。
       - 每个 CR 或 LF 各输出 CR、LF；其他字节原样输出；接收为空后返回。
@@ -71,21 +64,20 @@ functions:
   "void printf(const char *fmt, ...);":
     pre:
       - fmt 是有效的 NUL 结尾字符串；可识别转换的实参类型和数量匹配。
-      - "%f 的实参满足 printfloat 的取值范围。"
     effects:
       - 获取 print_lock，按格式顺序输出，结束可变参数访问并释放锁。
     post:
-      - "%d 读取 int，输出 32 位有符号十进制；%p 读取 unsigned int，输出 32 位无符号小写十六进制，无 0x 前缀。"
-      - "%x 读取 uint64，输出 0x 加 16 位小写十六进制；%c 读取提升后的 int，输出低 8 位。"
-      - "%s 输出字符串至 NUL，NULL 输出 (null)；%f 读取 double，截断输出 6 位小数。"
+      - "%d 读取 int，输出 32 位有符号十进制；%x 读取 int，输出 32 位无符号小写十六进制，无 0x 前缀。"
+      - "%p 读取 uint64，输出 0x 加 16 位小写十六进制；%c 读取提升后的 int，输出低 8 位。"
+      - "%s 输出字符串至 NUL，NULL 输出 (null)。"
       - "%% 输出一个 %；未知转换原样输出 % 及其后字符且不消费实参；末尾单独的 % 不输出。"
-  "void panic(const char *s) __attribute__((noreturn));":
+  "void panic(const char *s);":
     pre:
       - 调用用于报告不可继续的内核不变量破坏或必要启动条件无法满足。
     effects:
-      - 关闭当前 hart 的监督者中断，直接输出 panic、冒号、空格、可选消息及 LF。
+      - 通过 printf 输出 panic! 和消息，设置全局 panicked 标志并停止当前执行。
     post:
-      - 当前 hart 永不返回；无需获取 print_lock，允许在持锁时诊断；不隐含停止其他 hart。
+      - 当前 hart 永不返回；本阶段 panic 使用打印锁，不能在持有该锁时调用。
   "void assert(bool condition, const char *warning);":
     effects:
       - condition 为假时调用 panic(warning)。

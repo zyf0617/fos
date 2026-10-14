@@ -4,3 +4,5 @@
 #include "../arch/mod.h"
 #include "../lib/mod.h"
 #include "../lock/mod.h"
+
+#include "../proc/mod.h"

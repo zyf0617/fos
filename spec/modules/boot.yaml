@@ -5,7 +5,7 @@ owns:
 - src/kernel/main.c
 state:
   CPU_stack: 每hart 4096字节的早期栈数组，整体16字节对齐；有效hart ID为0..NCPU-1，当前NCPU为2。
-  initialized: 实际 boot hart 完成共享初始化后发布；其他hart在使用共享页表和trap状态前等待该标志。
+  init_state: 实际 boot hart 完成共享初始化后发布；其他hart在使用共享页表和trap状态前等待该标志。
   firmware_handoff: OpenSBI以S-mode进入_entry，a0为hart ID，a1为DTB地址或HSM opaque；本内核不解析a1。
 rules:
 - 共享模块只由原子选出的 boot hart 初始化一次；所有有效hart都安装自己的页表和trap环境。
@@ -32,6 +32,6 @@ functions:
     - 每个hart安装内核页表、本地PLIC与stvec环境，使用SBI TIME设置首次定时事件并开启中断。
     post:
     - boot hart 在共享初始化完成前不启动其余 hart；每次HSM调用均检查sbi_ret_t.error。
-    - hart0完成本地执行环境后调用proc_make_first；其他hart等待initialized后完成本地初始化并停在可处理中断的wfi循环。
+    - hart0完成本地执行环境后调用proc_make_first；其他hart等待 init_state=2后完成本地初始化并停在可处理中断的wfi循环。
     - 每个hart恰好输出一次带OpenSBI的启动提示；共享初始化仅由 boot hart 执行，首进程仅由 hart0 创建。
     - 主流程不返回。

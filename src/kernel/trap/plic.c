@@ -1,6 +1,6 @@
 #include "mod.h"
 
-// PLIC优先级寄存器是多核共享状态，只由CPU-0初始化一次。
+// PLIC优先级寄存器是多核共享状态，只由boot hart初始化一次。
 void plic_init(void)
 {
     *(volatile uint32 *)PLIC_PRIORITY(UART_IRQ) = 1;
@@ -12,7 +12,7 @@ void plic_inithart(void)
     int hartid = mycpuid();
     assert(hartid >= 0 && hartid < NCPU, "plic_inithart: invalid hart id");
 
-    *(volatile uint32 *)PLIC_SENABLE(hartid) = (1u << UART_IRQ);
+    *(volatile uint32 *)PLIC_SENABLE(hartid) = hartid == 0 ? (1u << UART_IRQ) : 0;
     *(volatile uint32 *)PLIC_SPRIORITY(hartid) = 0;
 }
 

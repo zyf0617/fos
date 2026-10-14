@@ -2,6 +2,7 @@
 #include "lib/mod.h"
 #include "mem/mod.h"
 #include "trap/mod.h"
+#include "proc/mod.h"
 //_entry在kernel.ld中定义 将后续hart中的启动地址定义为该地址
 extern void _entry(void);
 
@@ -50,11 +51,23 @@ void main(void)
     kvm_inithart();
 
     if (hartid == 0)
+    {
         mem_self_test();
+#ifdef LAB4_TEST
+        lab4_memory_test();
+        proc_self_test();
+#endif
+    }
 
     // 先设置当前hart的时钟事件，再安装trap入口并打开全局中断。
     timer_init();
     trap_kernel_inithart();
+
+#ifndef LAB4_BOOT_USER
+#define LAB4_BOOT_USER 1
+#endif
+    if (hartid == 0 && LAB4_BOOT_USER)
+        proc_make_first();
 
     while (1)
         asm volatile("wfi");

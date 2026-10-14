@@ -1,51 +1,79 @@
-# AegisOS LAB-3：中断与异常初步
+# AegisOS LAB-4：第一个用户进程与用户态陷阱
 
-## 实现状态
+## 当前实现
 
-本分支在 Lab 2 内存基础上完成 Lab 3：
+基于个人 `lab-3` 分支接入课程 `lab4` 模板（来源提交 `11fd5f65bfc9fbc826a6388849aba9cbb3ed016a`）。保留原有 OpenSBI 任意 boot hart 初始化、内存自检及内核态中断处理。
 
-- 安装 S-mode 内核 trap 入口，保存并恢复完整通用寄存器上下文；
-- 通过 PLIC 识别 UART 外部中断，支持字符、换行和 Backspace 回显；
-- 通过 SBI TIME 扩展为每个 hart 设置定时事件；
-- 由 CPU-0 在自旋锁保护下维护全局 ticks；
-- 保留 Lab 2 的物理内存和 Sv39 回归自检。
+- 首进程 `proczero` 拥有独立 Sv39 页表、用户代码页、用户栈、内核栈与 trapframe。
+- 用户代码从 `0x1000` 运行，零页不映射；代码 RXU、栈 RWU，trampoline/trapframe 不允许用户直接访问。
+- 经 `swtch → trap_user_return → user_return → sret` 首次进入 U-mode。
+- 用户 `ecall` 进入 `user_vector → trap_user_handler`；`SYS_helloworld` 输出并返回 0，未知调用号返回 -1，保存的 PC 前进 4 字节。
+- 用户态时钟和 UART 中断保存及恢复通用寄存器、PC 和栈。UART 路由到运行首进程的 hart0。
+- 用户异常停止故障执行，切回原内核上下文并回收该进程资源；内核继续响应中断。
+- 物理页耗尽返回 NULL；映射失败回滚新建叶项和中间页，首进程构造完成后才发布。
 
-构建与运行：
+本阶段只有一个用户进程；尚未实现多进程调度、fork/wait/exit、文件系统和 Agent 扩展。内核栈在启动时预分配，故障进程回收不释放该启动资源。本内核当前只保存整数寄存器，不提供用户浮点上下文切换。
+
+## Spec Coding 工作流
+
+1. 阅读 `spec/design.yaml` 与 `spec/patches/lab4.yaml`。
+2. 补全 `spec/modules/process.yaml`、`spec/modules/usertrap.yaml` 中四个函数的 pre/effects/post。
+3. 单独提交规格，再按规格实现并运行验收，最后提交代码。
+
+课程首次提供的 boot 规格假定 hart0 为 boot hart。本项目保留已验证的任意 boot hart 支持，并同步调整相关规格。Lab1–3 的继承规格也按个人实现校正，例如 printf 格式、UART 初始化与 timer 初始化顺序。
+
+可重点阅读：`src/kernel/proc/proc.c`、`src/kernel/trap/trap_user.c`、`src/kernel/trap/trampoline.S` 和 `src/kernel/proc/swtch.S`。C 结构体通过静态断言检查关键汇编偏移。
+
+## 构建与运行
+
+需要 RISC-V GCC/binutils、QEMU、make、xxd 和 Python 3。构建会自动选择可用的交叉编译器。macOS 已有原生工具时可直接执行；Ubuntu 使用解包工具链时，先 `source ../env.sh`。
 
 ```bash
-source ../env.sh
 make clean
 make build
 make run
 ```
 
-可重复执行的启动与内存回归测试：
+QEMU 使用 `virt`、双 hart、130 MiB 内存和默认 OpenSBI。保留 `OPENSBI=路径` 参数供需要固定固件的环境使用。
 
-```bash
-source ../env.sh
-make test
-```
-
-`make test` 会执行两次有界 QEMU 测试：第一次检查双 hart启动、Lab 2 内存自检和
-Lab 3 真实时钟中断；第二次向串口注入字符、Delete/Backspace 和回车，验证
-PLIC/UART 外部中断链路。两次测试均会确认未发生 panic，日志保存于
-`target/lab3-test.log` 和 `target/lab3-uart-test.log`。
-
-启动后的关键输出应包含：
+预期关键输出：
 
 ```text
 cpu 0 is booting with OpenSBI!
-lab-2 memory self-test passed
 cpu 1 is booting with OpenSBI!
+lab-2 memory self-test passed
+lab-4 entering user mode
+proczero: hello world!
+proczero: hello world!
 ticks = 1
 ticks = 2
 ticks = 3
 lab-3 timer interrupt test passed
 ```
 
-内存自检位于 `src/kernel/mem/test.c`；中断入口和分发位于
-`src/kernel/trap/trap.S` 与 `src/kernel/trap/trap_kernel.c`。运行 `make run`后也可手工输入字符，
-观察 UART 回显、换行和 Backspace。
+两条 CPU 提示可能交换顺序。输入普通字符、退格和回车可观察串口回显；QEMU 用 Ctrl-a 后按 x 退出。
+
+## 可重复验收
+
+```bash
+make test
+make test-lab3
+```
+
+`make test` 分别构建四种隔离镜像并运行真实 QEMU：
+
+| 场景 | 验证内容 |
+|---|---|
+| 默认入口 | 两次 hello world、双 hart、内存自检、持续计时及 UART 编辑回显 |
+| 用户现场 | 两次返回值为 0；未知调用返回 -1；带整数寄存器哨兵的用户执行跨越时钟和 UART 中断后仍可继续 |
+| 未知调用 | 显式未知号返回 -1；后续用户执行和中断正常 |
+| 零页访问 | load page fault（cause=13、stval=0）；停止用户执行并完整回收资源；之后内核 ticks 继续推进 |
+
+三个测试镜像还验证内核物理页池耗尽、页表映射和 walker 的分配失败回滚，以及首进程各分配阶段的失败回收。回收前后核对内核和用户空闲页计数，并验证旧映射不受影响、半初始化进程没有发布。测试宏 `LAB4_TEST` 下的专用调用号 98/99 仅用于报告寄存器检查和读取 tick；默认镜像不包含它们。
+
+`make test-lab3` 禁用用户进程入口，保留对内核态启动、内存、时钟及串口的验收。测试构建和串口日志保存于 `target/tests/<场景>/`；有限等待后主动终止 QEMU，内核主循环本身不退出。
+
+测试没有操作开发板；当前实现及验收面向 QEMU。课程参考代码、个人实现和测试均保留在同一仓库历史中。
 
 ---
 

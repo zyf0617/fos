@@ -29,7 +29,7 @@ functions:
     pre:
     - 单次初始化且尚无并发分配；链接符号 ALLOC_BEGIN、ALLOC_END 定义可分配物理内存边界。
     effects:
-    - 向内页对齐ALLOC_BEGIN和ALLOC_END，把前KERN_PAGES页划为内核区、其余页划为用户区，并初始化各区锁、空闲链表及计数。
+    - 校验 ALLOC_BEGIN 和 ALLOC_END 页对齐，把前KERN_PAGES页划为内核区、其余页划为用户区，并初始化各区锁、空闲链表及计数。
     post:
     - 每个可分配页恰好登记一次；空闲页用字节 1 填充，页头保存 next。
     - 无法形成两个非空区域属于必要启动条件失败并 panic。
