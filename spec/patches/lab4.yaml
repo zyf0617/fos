@@ -45,3 +45,14 @@ acceptance:
   expected:
   - 时钟和 UART 均从用户态进入；全部哨兵和用户栈保持，用户报告检查通过
   - 测试专用调用98和99只存在于 LAB4_TEST 镜像，默认镜像将这些调用作为未知号返回-1
+
+- scenario: 用户权限边界
+  input: 用户尝试写代码页、读取 TRAPFRAME 和跳转到内核入口
+  expected:
+  - 分别产生 store/load/instruction page fault，故障地址与请求一致
+  - 故障进程资源完整回收，内核继续运行；用户不能修改或读取受保护内存
+- scenario: 构建与 CPU 配置
+  input: 同目录重复构建、切换 TESTING 与链接选项，以及 CPUNUM=1 启动
+  expected:
+  - 无变化时产物时间戳不变；配置变化正确重建，默认镜像不残留测试代码
+  - 单 hart 的首进程及中断正常运行，NCPU 与 QEMU 核数一致

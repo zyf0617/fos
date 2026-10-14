@@ -13,10 +13,12 @@ HELLO = b'proczero: hello world!'
 ECHO = b'uart-tesx\x08 \x08t\r\n'
 
 
-def build(name, **options):
+def build(name, *, force=False, **options):
     target = OUT / name
     target.mkdir(parents=True, exist_ok=True)
-    command = ['make', '--no-print-directory', '-B', 'build', f'TARGET={target.relative_to(ROOT)}']
+    command = ['make', '--no-print-directory', 'build', f'TARGET={target.relative_to(ROOT)}']
+    if force:
+        command.insert(2, '-B')
     command += [f'{key}={value}' for key, value in options.items()]
     result = subprocess.run(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     (target / 'build.log').write_bytes(result.stdout)
@@ -25,10 +27,10 @@ def build(name, **options):
     return target
 
 
-def run(name, target, required, *, hello_count=None, fault=False, context=False, firmware='default'):
+def run(name, target, required, *, hello_count=None, fault=None, context=False, firmware='default', harts=2):
     command = [os.environ.get('QEMU', 'qemu-system-riscv64'), '-machine', 'virt',
                '-bios', firmware, '-kernel', str(target / 'kernel/kernel-qemu.elf'),
-               '-m', '130M', '-smp', '2', '-nographic']
+               '-m', '130M', '-smp', str(harts), '-nographic']
     process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     selector = selectors.DefaultSelector()
@@ -61,7 +63,8 @@ def run(name, target, required, *, hello_count=None, fault=False, context=False,
         if not fault and b'lab-4 user fault:' in output:
             raise RuntimeError(f'{name}: unexpected user fault')
         if fault:
-            if b'cause=0x000000000000000d' not in output or b'stval=0x0000000000000000' not in output:
+            cause, address = fault
+            if f'cause=0x{cause:016x}'.encode() not in output or f'stval=0x{address:016x}'.encode() not in output:
                 raise RuntimeError(f'{name}: wrong fault cause/address')
             if output.find(b'ticks = 10') < output.find(b'faulted process cleaned up'):
                 raise RuntimeError(f'{name}: no continued kernel ticks after cleanup')
@@ -83,6 +86,31 @@ def run(name, target, required, *, hello_count=None, fault=False, context=False,
         (target / f'{name}.log').write_bytes(output)
 
 
+def check_incremental_build():
+    target = build('incremental-build', TESTING=0)
+    def snapshot():
+        return {p.relative_to(target): p.stat().st_mtime_ns
+                for p in target.rglob('*') if p.suffix in {'.o', '.elf', '.bin', '.h'}}
+    before = snapshot()
+    build('incremental-build', TESTING=0)
+    if before != snapshot():
+        raise RuntimeError('unchanged build rebuilt artifacts')
+    elf = target / 'kernel/kernel-qemu.elf'
+    marker = b'lab-4 memory failure tests passed'
+    build('incremental-build', TESTING=1)
+    if marker not in elf.read_bytes():
+        raise RuntimeError('TESTING=1 did not rebuild test image')
+    build('incremental-build', TESTING=0)
+    if marker in elf.read_bytes():
+        raise RuntimeError('TESTING=0 retained test code')
+    timestamp = elf.stat().st_mtime_ns
+    build('incremental-build', TESTING=0, LDFLAGS='-z max-page-size=4096 --no-relax')
+    if elf.stat().st_mtime_ns == timestamp:
+        raise RuntimeError('link flag change did not relink image')
+    build('incremental-build', TESTING=0)
+    print('incremental-build: PASS (no-op, test flags, link flags)', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--lab3', action='store_true')
@@ -94,17 +122,26 @@ def main():
         target = build('lab3-baseline', BOOT_USER=0)
         run('lab3-baseline', target, base)
         return
+    check_incremental_build()
     target = build('default')
     run('default', target, base, hello_count=2)
-    for name, scenario in [('user-context', 0), ('unknown-syscall', 1), ('zero-page', 2)]:
+    for name, scenario, fault in [
+        ('user-context', 0, None), ('unknown-syscall', 1, None),
+        ('zero-page', 2, (13, 0)), ('code-write', 3, (15, 0x1000)),
+        ('trapframe-read', 4, (13, (1 << 38) - 8192)),
+        ('kernel-jump', 5, (12, 0x80200000))
+    ]:
         target = build(name, TESTING=1, SCENARIO=scenario)
         markers = base + [b'lab-4 memory failure tests passed', b'lab-4 process rollback test passed',
                           b'lab-4 user checks passed', b'lab-4 user UART interrupt handled']
-        if scenario == 2:
+        if fault:
             markers += [b'lab-4 faulted process cleaned up', b'ticks = 10']
         else:
             markers += [b'lab-4 user timer interrupt test passed']
-        run(name, target, markers, hello_count=2, fault=scenario == 2, context=True)
+        run(name, target, markers, hello_count=2, fault=fault, context=True)
+    target = build('single-hart', CPUNUM=1)
+    single = [marker for marker in base if b'cpu 1' not in marker]
+    run('single-hart', target, single, hello_count=2, harts=1)
     print(f'Lab 4 acceptance passed; logs: {OUT}', flush=True)
 
 

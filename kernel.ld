@@ -16,18 +16,10 @@ SECTIONS
     KEEP(*(.text.entry))
     *(.text .text.*)
     . = ALIGN(0x1000);
-    /*
-    _trampoline = .;
-    *(trampsec)
-    . = ALIGN(0x1000);
-    ASSERT(. - _trampoline == 0x1000, "error: trampoline larger than one page");
-    */
-    . = ALIGN(0x1000);
     _trampoline = .;
     KEEP(*(trampsec))
     . = ALIGN(0x1000);
     ASSERT(. - _trampoline == 0x1000, "error: trampoline larger than one page");
-    PROVIDE(KERNEL_DATA = .);
   } :text
 
   .rodata : {
@@ -35,6 +27,8 @@ SECTIONS
     *(.srodata .srodata.*) /* do not need to distinguish this from .rodata */
     . = ALIGN(16);
     *(.rodata .rodata.*)
+    . = ALIGN(4096);
+    PROVIDE(KERNEL_DATA = .);
   } :text
 
   .data : {

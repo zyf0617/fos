@@ -16,7 +16,7 @@ functions:
     pre:
     - OpenSBI在0x80200000以S-mode进入，a0中的hart ID位于0..NCPU-1。
     effects:
-    - 以a0选择CPU_stack中的4096字节槽并把sp设置为该槽顶端，保持a0作为start的hartid参数。
+    - 先验证 a0<NCPU，非法编号在无栈的 wfi 循环中停止；有效编号以a0选择CPU_stack中的4096字节槽并把sp设置为该槽顶端，保持a0作为start的hartid参数。
     post:
     - 当前hart使用独立早期栈调用start(hartid)；若start意外返回则停在wfi循环。
   void start(uint64 hartid):

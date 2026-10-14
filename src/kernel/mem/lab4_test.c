@@ -3,6 +3,16 @@
 static void *pages[KERN_PAGES];
 void lab4_memory_test(void)
 {
+    // ELF只读段必须由硬件页表约束，不能仅依赖C语言const。
+    pgtbl_t kernel = (pgtbl_t)((r_satp() & ((1ul << 44) - 1)) << 12);
+    pte_t *readonly = vm_getpte(kernel, (uint64)"kernel readonly test", false);
+    pte_t *writable = vm_getpte(kernel, (uint64)pages, false);
+    pte_t *guard = vm_getpte(kernel, TRAPFRAME, false);
+    assert(readonly && (*readonly & PTE_R) && !(*readonly & (PTE_W | PTE_U)),
+           "memory test: readonly section writable");
+    assert(writable && (*writable & PTE_W) && !(*writable & (PTE_X | PTE_U)),
+           "memory test: kernel data permissions");
+    assert(guard == NULL || !(*guard & PTE_V), "memory test: kernel stack guard mapped");
     uint32 before = pmem_available(true);
     for (uint32 i = 0; i < before; i++)
     {
@@ -46,6 +56,21 @@ void lab4_memory_test(void)
            vm_mappages(root, 0, page, PGSIZE, PTE_W) == -1 &&
            vm_mappages(root, VA_MAX - PGSIZE, page, PGSIZE + 1, PTE_R) == -1 &&
            *vm_getpte(root, USER_BASE, false) == old, "memory test: invalid map accepted");
+    assert(vm_mappages(root, 2ul << 30, page, PGSIZE, PTE_R) == 0,
+           "memory test: distant mapping failed");
+    pte_t distant = *vm_getpte(root, 2ul << 30, false);
+    baseline = pmem_available(true);
+    pmem_test_fail_after(1);
+    int result = vm_mappages(root, (1ul << 30) - PGSIZE, page, 2 * PGSIZE, PTE_R);
+    pmem_test_fail_after(-1);
+    assert(result == -1 && pmem_available(true) == baseline &&
+           *vm_getpte(root, 2ul << 30, false) == distant &&
+           *vm_getpte(root, USER_BASE, false) == old,
+           "memory test: range rollback changed unrelated subtree");
+    assert(vm_mappages(root, (1ul << 30) - PGSIZE, page, 2 * PGSIZE, PTE_R) == 0,
+           "memory test: cross-root mapping failed");
+    assert(*vm_getpte(root, 2ul << 30, false) == distant,
+           "memory test: range commit changed unrelated subtree");
     vm_freewalk(root);
     pmem_free(page, false);
     assert(pmem_available(true) == before, "memory test: final leak");

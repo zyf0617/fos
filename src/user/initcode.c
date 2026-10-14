@@ -23,6 +23,12 @@ __attribute__((section(".text.entry"))) int main(void)
     syscall(98);
     if (LAB4_SCENARIO == 2)
         asm volatile("ld zero, 0(zero)" ::: "memory");
+    if (LAB4_SCENARIO == 3)
+        asm volatile("sd zero, 0(%0)" : : "r"(0x1000ul) : "memory");
+    if (LAB4_SCENARIO == 4)
+        asm volatile("ld zero, 0(%0)" : : "r"((1ul << 38) - 8192) : "memory");
+    if (LAB4_SCENARIO == 5)
+        asm volatile("jalr zero, 0(%0)" : : "r"(0x80200000ul) : "memory");
 #else
     syscall(SYS_helloworld);
     syscall(SYS_helloworld);

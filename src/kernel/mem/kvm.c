@@ -47,16 +47,22 @@ pte_t *vm_getpte(pgtbl_t root, uint64 va, bool alloc)
     return walk(root, va, alloc, false);
 }
 
-static void finish_mapping(pgtbl_t root, int level, bool commit)
+static void finish_mapping(pgtbl_t root, int level, uint64 first, uint64 last, bool commit)
 {
     if (level == 0)
         return;
-    for (int i = 0; i < 512; i++)
+    uint64 low = VA_TO_VPN(first, level), high = VA_TO_VPN(last, level);
+    for (uint64 i = low; i <= high; i++)
     {
         pte_t *entry = &root[i];
         if (!(*entry & PTE_V) || !PTE_CHECK(*entry))
             continue;
-        finish_mapping((pgtbl_t)PTE_TO_PA(*entry), level - 1, commit);
+        // 每层只访问本次范围覆盖的槽；跨边界时中间子树覆盖完整VPN范围。
+        uint64 span = 1ul << VA_SHIFT(level);
+        uint64 child_first = i == low ? first : 0;
+        uint64 child_last = i == high ? last : span - 1;
+        finish_mapping((pgtbl_t)PTE_TO_PA(*entry), level - 1,
+                       child_first, child_last, commit);
         if (*entry & PTE_NEW)
         {
             if (commit)
@@ -100,7 +106,7 @@ int vm_mappages(pgtbl_t root, uint64 va, uint64 pa, uint64 len, int perm)
     if (!success)
         for (uint64 offset = 0; offset < done; offset += PGSIZE)
             *walk(root, va + offset, false, false) = 0;
-    finish_mapping(root, 2, success);
+    finish_mapping(root, 2, va, va + size - 1, success);
     return success ? 0 : -1;
 }
 

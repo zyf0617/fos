@@ -5,10 +5,10 @@ owns:
 - kernel.ld
 - user.ld
 state:
-  target: target目录保存内核与用户目标文件及依赖；CPUNUM在Makefile中配置，INTERVAL在trap/type.h中配置。
+  target: target目录保存内核与用户目标文件及依赖；CPUNUM 在 Makefile 中配置，并通过 -DNCPU 同步到 C 与汇编；TIMER_INTERVAL 在 trap/type.h 中配置。
 rules:
-- 使用 freestanding RV64GC/lp64d C 与汇编，不链接宿主标准库；CPUNUM与NCPU保持一致，当前均为2。
-- OpenSBI占用0x80000000起的前2MiB，内核入口_entry链接到0x80200000；trampoline单独页对齐且不超过4096字节。
+- 使用 freestanding RV64GC/lp64d C 与汇编，不链接宿主标准库；CPUNUM 与 NCPU 由同一构建选项决定，默认均为2，单 hart 与双 hart 均有回归。
+- OpenSBI占用0x80000000起的前2MiB，内核入口_entry链接到0x80200000；trampoline 单独页对齐且不超过4096字节；KERNEL_DATA 位于页对齐的 rodata 末尾，保证只读段不被数据区 RW 映射覆盖。
 - QEMU提供130MiB物理内存，内核只管理[0x80200000, 0x88200000)的128MiB，不覆盖OpenSBI。
 - 用户 main 使用显式入口段及链接脚本从 USER_BASE=0x1000 开始；无编译优化或重排参数依赖。
 targets:
@@ -19,7 +19,7 @@ targets:
     - 构建用户ELF、二进制与内嵌数据，编译内核并链接。
     post:
     - 生成可由 QEMU 加载的 kernel-qemu.elf；编译或链接失败停止并返回非零。
-    - 内嵌 initcode 及长度来自本次用户二进制；C/汇编/头文件变化触发相关目标增量重建。
+    - 内嵌 initcode 及长度来自本次用户二进制；C/汇编/头文件变化触发相关目标增量重建；编译/链接工具、编译/链接选项与 CPU 数量变化也更新构建配置并重建，无变化时不重编译。
   run:
     pre:
     - qemu-system-riscv64 可用。

@@ -4,7 +4,7 @@ include common.mk
 
 BOOT_USER ?= 1
 SCENARIO ?= 0
-CFLAGS += -DLAB4_BOOT_USER=$(BOOT_USER) -DLAB4_SCENARIO=$(SCENARIO)
+CFLAGS += -DNCPU=$(CPUNUM) -DLAB4_BOOT_USER=$(BOOT_USER) -DLAB4_SCENARIO=$(SCENARIO)
 CFLAGS += -I$(TARGET)/user
 ifeq ($(TESTING),1)
 CFLAGS += -DLAB4_TEST
@@ -61,7 +61,6 @@ endif
 
 # QEMU模拟器配置
 QEMU     = qemu-system-riscv64  # 指定QEMU程序
-LOCAL_OPENSBI = ../toolchain/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_dynamic.bin
 OPENSBI ?= default
 QEMUOPTS = -machine virt -bios $(OPENSBI) -kernel $(ELFKernel)  # 使用OpenSBI启动S-mode内核
 QEMUOPTS += -m 130M -smp $(CPUNUM) -nographic  # 物理内存从0x80000000到0x88200000
@@ -157,10 +156,16 @@ test-lab3:
 
 # 配置变化也必须重编译，避免测试宏或用户入口混入另一种镜像。
 $(TARGET)/build-config: FORCE | $(TARGET)
-	@printf '%s\n' '$(CC)' '$(CFLAGS)' '$(CPUNUM)' > $@.tmp
+	@printf '%s\n' '$(CC)' '$(LD)' '$(OBJCOPY)' '$(CFLAGS)' '$(LDFLAGS)' '$(CPUNUM)' > $@.tmp
 	@cmp -s $@.tmp $@ || mv $@.tmp $@
 	@rm -f $@.tmp
 
 $(KernelOBJ) $(UserOBJ): $(TARGET)/build-config
 FORCE:
 .PHONY: FORCE
+
+# GNU make 3.81按秒比较文件时间；配置快速切换时不能仅依赖stamp的mtime。
+CONFIG_CHANGED := $(shell printf '%s\n' '$(CC)' '$(LD)' '$(OBJCOPY)' '$(CFLAGS)' '$(LDFLAGS)' '$(CPUNUM)' | cmp -s - $(TARGET)/build-config || echo yes)
+ifeq ($(CONFIG_CHANGED),yes)
+$(KernelOBJ) $(UserOBJ) $(ELFUser) $(NakedUser) $(InitcodeHeader) $(ELFKernel): FORCE
+endif
