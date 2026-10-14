@@ -1,0 +1,21 @@
+system: RV64GC 单体教学内核：Lab4 首个用户进程与用户陷入闭环。
+machine:
+  board: QEMU virt
+  firmware: OpenSBI（QEMU -bios default），以 S-mode 将控制权交给内核。
+  memory: QEMU提供130MiB物理内存；0x80000000起的前2MiB保留给OpenSBI，内核从0x80200000使用其余128MiB。
+  harts: CPUNUM与NCPU均为2；OpenSBI 可选择任意 boot hart；实际 boot hart 初始化共享状态并通过 SBI HSM 启动其余 hart，hart0 创建唯一用户进程。
+mechanisms:
+- Sv39内核/用户页表
+- 独立内核栈与trapframe
+- swtch和trampoline
+- OpenSBI HSM多核启动与TIME定时服务
+- 用户ecall、S-mode时钟中断和PLIC/UART外部中断
+rules:
+- 各模块契约共同约束系统；头文件提供类型与ABI，不能替代行为契约。
+- 用户零页不映射；用户页表不暴露内核可写资源。
+- 先建立内存和trap环境，再发布首进程；其他hart只在共享初始化发布后访问共享模块。
+- 内核始终运行在S-mode，不直接访问M-mode CSR或CLINT；机器态资源由OpenSBI代理。
+non_goals:
+- 多进程调度和完整fork/wait/exit生命周期
+- 文件系统与块设备
+- 首进程故障后重启或重建用户执行
