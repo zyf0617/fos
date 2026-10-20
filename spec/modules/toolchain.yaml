@@ -7,6 +7,7 @@ owns:
 state:
   target: target目录保存内核与用户目标文件及依赖；CPUNUM 在 Makefile 中配置，并通过 -DNCPU 同步到 C 与汇编；TIMER_INTERVAL 在 trap/type.h 中配置。
 rules:
+- 显式指定 -march=rv64gc_zicsr_zifencei 与 -mabi=lp64d，避免工具链默认ISA不含 fence.i 或 CSR 指令；依赖文件使用 -MMD -MP，仅跟踪项目头文件并容忍旧头文件被移除。
 - 使用 freestanding RV64GC/lp64d C 与汇编，不链接宿主标准库；CPUNUM 与 NCPU 由同一构建选项决定，默认均为2，单 hart 与双 hart 均有回归。
 - OpenSBI占用0x80000000起的前2MiB，内核入口_entry链接到0x80200000；trampoline 单独页对齐且不超过4096字节；KERNEL_DATA 位于页对齐的 rodata 末尾，保证只读段不被数据区 RW 映射覆盖。
 - QEMU提供130MiB物理内存，内核只管理[0x80200000, 0x88200000)的128MiB，不覆盖OpenSBI。

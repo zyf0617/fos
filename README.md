@@ -28,6 +28,14 @@
 
 需要 RISC-V GCC/binutils、QEMU、make、xxd 和 Python 3。构建会自动选择可用的交叉编译器。macOS 已有原生工具时可直接执行；Ubuntu 使用解包工具链时，先 `source ../env.sh`。
 
+编译显式指定 RV64GC、Zicsr、Zifencei 和 lp64d ABI，避免不同 GCC 默认配置导致 CSR 或 `fence.i` 汇编失败。依赖文件只记录项目头文件；切换宿主系统、工具链安装位置，或首次使用本修订时，先清理旧产物（包括 `make clean TARGET=target/tests`），避免旧依赖引用另一台机器的路径。
+
+若解包版 QEMU 找不到默认 OpenSBI 固件，可先指定项目自带固件；`make run` 和两种验收均支持此环境变量：
+
+```bash
+export OPENSBI="$OSLAB_ROOT/toolchain/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_dynamic.bin"
+```
+
 ```bash
 make clean
 make build
@@ -60,7 +68,11 @@ make test
 make test-lab3
 ```
 
+完整验收还包含三种内核紧急报错场景：普通调用、持有打印锁、CPU 中断嵌套计数损坏。它们必须输出一次原始错误信息并停止当前 hart；`python3 tests/test_lab4.py --panic` 可单独运行。紧急输出绕过正常锁和计数，由首个 panic 调用者输出；仍依赖 UART 硬件可用，不保证全机其他 hart 已同步停止。
+
 `make test` 先检查增量构建，再构建八种隔离镜像并运行真实 QEMU：
+
+所有镜像启动时还检查 `memmove` 的双向重叠复制、原地复制、零长度和独立缓冲区复制，确保内存搬移符合基础库契约。
 
 | 场景 | 验证内容 |
 |---|---|

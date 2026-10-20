@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'target' / 'tests'
 HELLO = b'proczero: hello world!'
 ECHO = b'uart-tesx\x08 \x08t\r\n'
+PANIC_SCENARIOS = [('panic-normal', 6), ('panic-print-lock', 7),
+                   ('panic-broken-nesting', 8)]
 
 
 def build(name, *, force=False, **options):
@@ -27,9 +29,10 @@ def build(name, *, force=False, **options):
     return target
 
 
-def run(name, target, required, *, hello_count=None, fault=None, context=False, firmware='default', harts=2):
+def run(name, target, required, *, hello_count=None, fault=None, context=False, firmware=None, harts=2):
     command = [os.environ.get('QEMU', 'qemu-system-riscv64'), '-machine', 'virt',
-               '-bios', firmware, '-kernel', str(target / 'kernel/kernel-qemu.elf'),
+               '-bios', firmware or os.environ.get('OPENSBI', 'default'),
+               '-kernel', str(target / 'kernel/kernel-qemu.elf'),
                '-m', '130M', '-smp', str(harts), '-nographic']
     process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -111,18 +114,55 @@ def check_incremental_build():
     print('incremental-build: PASS (no-op, test flags, link flags)', flush=True)
 
 
+def check_panic(name, scenario):
+    target = build(name, TESTING=1, SCENARIO=scenario, CPUNUM=1)
+    command = [os.environ.get('QEMU', 'qemu-system-riscv64'), '-machine', 'virt',
+               '-bios', os.environ.get('OPENSBI', 'default'), '-kernel',
+               str(target / 'kernel/kernel-qemu.elf'), '-m', '130M',
+               '-smp', '1', '-nographic']
+    process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    output = b''
+    try:
+        output, _ = process.communicate(timeout=2)
+        raise RuntimeError(f'{name}: QEMU unexpectedly exited: {output[-500:]!r}')
+    except subprocess.TimeoutExpired:
+        process.terminate()
+        try:
+            output, _ = process.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            output, _ = process.communicate()
+    finally:
+        (target / f'{name}.log').write_bytes(output)
+    message = b'panic! console emergency test\n'
+    if output.count(message) != 1 or output.count(b'panic!') != 1:
+        raise RuntimeError(f'{name}: original panic message missing or recursive')
+    if b'ticks =' in output.split(message, 1)[1] or HELLO in output:
+        raise RuntimeError(f'{name}: execution continued after panic')
+    print(f'{name}: PASS', flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--lab3', action='store_true')
+    parser.add_argument('--panic', action='store_true')
     args = parser.parse_args()
     OUT.mkdir(parents=True, exist_ok=True)
+    if args.panic:
+        for name, scenario in PANIC_SCENARIOS:
+            check_panic(name, scenario)
+        return
     base = [b'cpu 0 is booting with OpenSBI!', b'cpu 1 is booting with OpenSBI!',
-            b'lab-2 memory self-test passed', b'lab-3 timer interrupt test passed']
+            b'kernel memmove self-test passed', b'lab-2 memory self-test passed',
+            b'lab-3 timer interrupt test passed']
     if args.lab3:
         target = build('lab3-baseline', BOOT_USER=0)
         run('lab3-baseline', target, base)
         return
     check_incremental_build()
+    for name, scenario in PANIC_SCENARIOS:
+        check_panic(name, scenario)
     target = build('default')
     run('default', target, base, hello_count=2)
     for name, scenario, fault in [

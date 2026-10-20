@@ -29,6 +29,15 @@ void uart_init(void)
 }
 
 // 单个字符输出
+// 仅供首个panic调用者使用：不访问锁、中断嵌套计数或正常输出停止标志。
+void uart_putc_panic(int c)
+{
+	while ((ReadReg(LSR) & LSR_TX_IDLE) == 0)
+		;
+	WriteReg(THR, c);
+}
+
+// 单个字符输出
 void uart_putc_sync(int c)
 {
 	// 关闭中断

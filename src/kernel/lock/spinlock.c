@@ -24,8 +24,8 @@ void push_off(void)
 void pop_off(void)
 {
     cpu_t *cpu = mycpu();
-    assert(intr_get() == 0, "push_off: 1\n"); // 确保此时中断是关闭的
-    assert(cpu->noff >= 1, "push_off: 2\n");  // 确保push和pop的对应
+    assert(intr_get() == 0, "pop_off: interrupts enabled");
+    assert(cpu->noff >= 1, "pop_off: nesting underflow");
     cpu->noff--;
     if (cpu->noff == 0 && cpu->origin == 1) // 只有所有push操作都被抵消且原来状态是开着时
         intr_on();

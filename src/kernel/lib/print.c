@@ -14,7 +14,7 @@ void print_init(void)
     spinlock_init(&print_lk, "printf");
 }
 
-/* %d %p */
+/* %d %x */
 static void printint(int xx, int base, int sign)
 {
     char buf[16];
@@ -39,7 +39,7 @@ static void printint(int xx, int base, int sign)
         uart_putc_sync(buf[i]);
 }
 
-/* %x */
+/* %p */
 static void printptr(uint64 x)
 {
     uart_putc_sync('0');
@@ -51,8 +51,8 @@ static void printptr(uint64 x)
 /*
     标准化输出, 需要支持:
     1. %d (32位有符号数,以10进制输出)
-    2. %p (32位无符号数,以16进制输出)
-    3. %x (64位无符号数,以0x开头的16进制输出)
+    2. %x (32位无符号数,以16进制输出)
+    3. %p (64位无符号数,以0x开头的16进制输出)
     4. %c (单个字符)
     5. %s (字符串)
     提示: stdarg.h中的va_list中包括你需要的参数地址
@@ -116,13 +116,35 @@ void printf(const char *fmt, ...)
 /* 如果发生panic, UART的停止标志 */
 volatile int panicked = 0;
 
+#ifdef LAB4_TEST
+void print_panic_test(int scenario)
+{
+    if (scenario == 7)
+        spinlock_acquire(&print_lk);
+    if (scenario == 8)
+        mycpu()->noff = -1;
+    panic("console emergency test");
+}
+#endif
+
 /* 报错并终止输出 */
 void panic(const char *s)
 {
-    printf("panic! %s\n", s);
-    panicked = 1;
+    // 报错本身不能依赖可能已损坏的锁与push_off/pop_off状态。
+    intr_off();
+    if (__sync_bool_compare_and_swap(&panicked, 0, 1))
+    {
+        const char *prefix = "panic! ";
+        while (*prefix)
+            uart_putc_panic(*prefix++);
+        if (s == NULL)
+            s = "(null)";
+        while (*s)
+            uart_putc_panic(*s++);
+        uart_putc_panic('\n');
+    }
     while (1)
-        ;
+        asm volatile("wfi");
 }
 
 /* 如果不满足条件, 则调用panic */

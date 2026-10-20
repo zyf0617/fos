@@ -63,6 +63,11 @@ void main(void)
     timer_init();
     trap_kernel_inithart();
 
+#if defined(LAB4_TEST) && LAB4_SCENARIO >= 6 && LAB4_SCENARIO <= 8
+    if (hartid == 0)
+        print_panic_test(LAB4_SCENARIO);
+#endif
+
 #ifndef LAB4_BOOT_USER
 #define LAB4_BOOT_USER 1
 #endif

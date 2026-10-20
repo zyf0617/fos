@@ -1,5 +1,26 @@
 #include "mod.h"
 
+// 向高地址搬移重叠区间时，不能覆盖尚未读取的源字节。
+static void memmove_self_test(void)
+{
+    uint8 data[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    const uint8 right[8] = {0, 1, 0, 1, 2, 3, 4, 5};
+    const uint8 left[8] = {0, 1, 2, 3, 4, 5, 4, 5};
+    memmove(data + 2, data, 6);
+    for (uint32 i = 0; i < sizeof(data); i++)
+        assert(data[i] == right[i], "memmove test: right overlap corrupted");
+    memmove(data, data + 2, 6);
+    memmove(data, data, sizeof(data));
+    memmove(data + 1, data, 0);
+    for (uint32 i = 0; i < sizeof(data); i++)
+        assert(data[i] == left[i], "memmove test: left overlap or no-op corrupted");
+    uint8 copy[8];
+    memmove(copy, data, sizeof(copy));
+    for (uint32 i = 0; i < sizeof(copy); i++)
+        assert(copy[i] == left[i], "memmove test: separate copy corrupted");
+    printf("kernel memmove self-test passed\n");
+}
+
 // 内核页池和用户页池共用同一套分配器不变式，但必须分别验证。
 static void check_page_pool(bool in_kernel)
 {
@@ -81,6 +102,7 @@ static void vm_self_test(void)
 
 void mem_self_test(void)
 {
+    memmove_self_test();
     pmem_self_test();
     vm_self_test();
     printf("lab-2 memory self-test passed\n");

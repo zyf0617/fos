@@ -9,7 +9,9 @@ OBJDUMP = ${TOOLPREFIX}objdump
 # 编译相关配置
 CFLAGS = -Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2
 CFLAGS += -std=gnu17
-CFLAGS += -MD
+CFLAGS += -MMD -MP
+# 不依赖工具链默认ISA；较新GCC将CSR与指令缓存同步拆成独立扩展。
+CFLAGS += -march=rv64gc_zicsr_zifencei -mabi=lp64d
 CFLAGS += -mcmodel=medany
 CFLAGS += -ffreestanding -fno-common -nostdlib -mno-relax
 CFLAGS += -I.

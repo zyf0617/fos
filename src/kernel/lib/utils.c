@@ -13,12 +13,19 @@ void memmove(void *dst, const void *src, uint32 n)
 {
     char *d = dst;
     const char *s = src;
-    while (n--)
+    if (n == 0 || d == s)
+        return;
+    // 内核使用平坦地址；按地址判断方向，避免跨对象指针大小比较。
+    if ((uint64)d > (uint64)s && (uint64)d - (uint64)s < n)
     {
-        *d = *s;
-        d++;
-        s++;
+        d += n;
+        s += n;
+        while (n--)
+            *--d = *--s;
     }
+    else
+        while (n--)
+            *d++ = *s++;
 }
 
 // 字符串p的前n个字符与q做比较
