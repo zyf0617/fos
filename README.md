@@ -1,97 +1,80 @@
-# AegisOS LAB-4：第一个用户进程与用户态陷阱
+# AegisOS Lab 5：用户虚拟内存与系统调用
+
+基于个人 Lab 4 提交 `928fa8e`，按助教 `lab5` 分支 `4a0f4b7` 的规格增量实现。先单独提交规格，再接平台、用户内存与验收；保留 Lab 4 的权限隔离、寄存器现场、失败回滚和紧急报错修复。
 
 ## 当前实现
 
-基于个人 `lab-3` 分支接入课程 `lab4` 模板（来源提交 `11fd5f65bfc9fbc826a6388849aba9cbb3ed016a`）。保留原有 OpenSBI 任意 boot hart 初始化、内存自检及内核态中断处理。
+- syscall 编号 0–7：helloworld、copyin、copyout、copyinstr、brk、mmap、munmap、printf；a7 为编号、a0..a5 为参数、a0 为结果。
+- 用户指针经过逐页 V/U/R/W 检查；跨页复制与有界字符串复制均可返回失败，不触发内核 panic。printf 将用户字符串按原文输出，最多 127 字节加 NUL。
+- brk 按字节记录堆顶；按页面增长/收缩。load/store 缺页只在合法栈区自动补齐全部中间页，成功后重试原指令。
+- mmap 使用有序已分配区间链和带锁的 256 节点池，支持自动首次适配、固定地址、同权限合并及 munmap 裁剪/拆分/跨段解除。含空洞的解除失败且不改变原状态。
+- 多页分配先在临时页表中完成，成功后无分配地提交；不足时原 PTE、进程元数据和空闲资源计数保持不变。
+- 页表复制保留内容与权限，用户物理页独立；销毁统一回收用户页及页表，trapframe 由进程单独回收，trampoline 共享。用户故障后动态堆、栈和 mmap 资源全部回收，内核继续响应中断。
+- 实际启动核 `boot_hartid` 创建唯一用户进程，辅助核留在内核；UART 接收和全局 ticks 归属该启动核。RX 中断为 IER bit0，TX bit1 不开启。
 
-- 首进程 `proczero` 拥有独立 Sv39 页表、用户代码页、用户栈、内核栈与 trapframe。
-- 用户代码从 `0x1000` 运行，零页不映射；代码 RXU、栈 RWU，trampoline/trapframe 不允许用户直接访问。
-- 经 `swtch → trap_user_return → user_return → sret` 首次进入 U-mode。
-- 用户 `ecall` 进入 `user_vector → trap_user_handler`；`SYS_helloworld` 输出并返回 0，未知调用号返回 -1，保存的 PC 前进 4 字节。
-- 用户态时钟和 UART 中断保存及恢复通用寄存器、PC 和栈。UART 路由到运行首进程的 hart0。
-- 用户异常停止故障执行，切回原内核上下文并回收该进程资源；内核继续响应中断。
-- 物理页耗尽返回 NULL；映射失败回滚新建叶项和中间页，首进程构造完成后才发布。
-
-本阶段只有一个用户进程；尚未实现多进程调度、fork/wait/exit、文件系统和 Agent 扩展。内核栈在启动时预分配，故障进程回收不释放该启动资源。本内核当前只保存整数寄存器，不提供用户浮点上下文切换。
-
-## Spec Coding 工作流
-
-1. 阅读 `spec/design.yaml` 与 `spec/patches/lab4.yaml`。
-2. 补全 `spec/modules/process.yaml`、`spec/modules/usertrap.yaml` 中四个函数的 pre/effects/post。
-3. 单独提交规格，再按规格实现并运行验收，最后提交代码。
-
-课程首次提供的 boot 规格假定 hart0 为 boot hart。本项目保留已验证的任意 boot hart 支持，并同步调整相关规格。Lab1–3 的继承规格也按个人实现校正，例如 printf 格式、UART 初始化与 timer 初始化顺序。
-
-可重点阅读：`src/kernel/proc/proc.c`、`src/kernel/trap/trap_user.c`、`src/kernel/trap/trampoline.S` 和 `src/kernel/proc/swtch.S`。C 结构体通过静态断言检查关键汇编偏移。
+本阶段没有调度器、fork/wait/exec、文件系统及浮点上下文切换。页表复制供后续实验使用，不等于已经实现多进程。
 
 ## 构建与运行
 
-需要 RISC-V GCC/binutils、QEMU、make、xxd 和 Python 3。构建会自动选择可用的交叉编译器。macOS 已有原生工具时可直接执行；Ubuntu 使用解包工具链时，先 `source ../env.sh`。
-
-编译显式指定 RV64GC、Zicsr、Zifencei 和 lp64d ABI，避免不同 GCC 默认配置导致 CSR 或 `fence.i` 汇编失败。依赖文件只记录项目头文件；切换宿主系统、工具链安装位置，或首次使用本修订时，先清理旧产物（包括 `make clean TARGET=target/tests`），避免旧依赖引用另一台机器的路径。
-
-若解包版 QEMU 找不到默认 OpenSBI 固件，可先指定项目自带固件；`make run` 和两种验收均支持此环境变量：
+需要 RISC-V GCC/binutils、make、xxd、Python 3 和 QEMU。macOS 可使用原生工具；Ubuntu 解包工具链先执行：
 
 ```bash
+source ../env.sh
 export OPENSBI="$OSLAB_ROOT/toolchain/usr/lib/riscv64-linux-gnu/opensbi/generic/fw_dynamic.bin"
+make build PLATFORM=qemu
+make run PLATFORM=qemu
 ```
+
+正常安装的 QEMU 可不设置 OPENSBI，使用默认固件。QEMU 固定双 hart、130 MiB RAM，默认产物 `target/qemu/kernel/kernel-qemu.elf`。初次从旧构建迁移或切换宿主工具链时清理旧产物；普通源码/选项变化支持增量重编译。
+
+默认用户程序演示数组往返、字符串、堆、多页栈和 mmap，输出 `lab-5 demo PASS` 后保持用户循环。输入字符可观察 UART 编辑回显，Ctrl-a 后 x 退出 QEMU。
 
 ```bash
-make clean
-make build
-make run
+make build PLATFORM=vf2
 ```
 
-QEMU 默认使用 `virt`、双 hart、130 MiB 内存和默认 OpenSBI；可用 `make run CPUNUM=1` 运行单 hart，内核常量由同一选项同步。保留 `OPENSBI=路径` 参数供需要固定固件的环境使用。
-
-预期关键输出：
-
-```text
-cpu 0 is booting with OpenSBI!
-cpu 1 is booting with OpenSBI!
-lab-2 memory self-test passed
-lab-4 entering user mode
-proczero: hello world!
-proczero: hello world!
-ticks = 1
-ticks = 2
-ticks = 3
-lab-3 timer interrupt test passed
-```
-
-两条 CPU 提示可能交换顺序。输入普通字符、退格和回车可观察串口回显；QEMU 用 Ctrl-a 后按 x 退出。
+VF2 生成 `target/vf2/kernel/kernel-vf2.elf` 与 `kernel-vf2.bin`；后者包含供 U-Boot booti 使用的 RISC-V Image 头。两平台产物隔离。`make run/debug PLATFORM=vf2` 拒绝自动启动并提示使用 booti。
 
 ## 可重复验收
 
+在仓库根目录执行：
+
 ```bash
-make test
+make test-lab5
+make test-lab4
 make test-lab3
 ```
 
-完整验收还包含三种内核紧急报错场景：普通调用、持有打印锁、CPU 中断嵌套计数损坏。它们必须输出一次原始错误信息并停止当前 hart；`python3 tests/test_lab4.py --panic` 可单独运行。紧急输出绕过正常锁和计数，由首个 panic 调用者输出；仍依赖 UART 硬件可用，不保证全机其他 hart 已同步停止。
+`make test` 默认运行 Lab 5。分组定位：
 
-`make test` 先检查增量构建，再构建八种隔离镜像并运行真实 QEMU：
+```bash
+python3 tests/test_lab5.py --group copy
+python3 tests/test_lab5.py --group heap-stack
+python3 tests/test_lab5.py --group mmap
+python3 tests/test_lab5.py --group pagetable
+python3 tests/test_lab5.py --group platform
+```
 
-所有镜像启动时还检查 `memmove` 的双向重叠复制、原地复制、零长度和独立缓冲区复制，确保内存搬移符合基础库契约。
+| 验收 | 内容 |
+| --- | --- |
+| 用户复制 | 非对齐跨页、不可读/不可写页、无 U 位、特殊页、NUL 边界、零长度、溢出与部分前缀 |
+| 堆栈 | 字节堆顶、跨页收缩、一次跨多页扩栈、数据页/页表页 OOM、原树不变 |
+| mmap | 节点耗尽、双核唯一所有权、合并/拆分/跨权限裁剪、含空洞拒绝、节点不足原子失败 |
+| 页表 | 全页内容/权限比对、独立物理页、逐分配失败注入、特殊映射保留、完整销毁 |
+| 用户态端到端 | 参数高位检查、数组往返、brk、真实栈缺页、mmap 访问、动态资源保留后故障清理 |
+| 权限回归 | 零页读取、代码写入、trapframe 读取、内核地址取指均停止用户程序，清理后 ticks 继续 |
+| 平台 | 交替构建与无修改不重建、Image 头/BSS/入口、非法平台/核数拒绝；Linux 上运行实际 UART/PLIC 源码的 MMIO 探针 |
+| Lab 4/3 | 整数现场跨用户 timer/UART 中断、未知调用、内存失败回滚、三种 panic 场景、内核态中断基线 |
 
-| 场景 | 验证内容 |
-|---|---|
-| 默认入口 | 两次 hello world、双 hart、内存自检、持续计时及 UART 编辑回显 |
-| 用户现场 | 两次返回值为 0；未知调用返回 -1；带整数寄存器哨兵的用户执行跨越时钟和 UART 中断后仍可继续 |
-| 未知调用 | 显式未知号返回 -1；后续用户执行和中断正常 |
-| 零页访问 | load page fault（cause=13、stval=0）；停止用户执行并完整回收资源；之后内核 ticks 继续推进 |
-| 代码页写入 | store page fault（cause=15、stval=0x1000）；代码不可写 |
-| trapframe 读取 | load page fault；无 PTE_U 的共享陷阱页不可被用户读取 |
-| 内核地址跳转 | instruction page fault；用户页表不暴露内核入口 |
-| 单 hart | CPUNUM=1 下首进程、时钟及串口正常 |
+日志保存在 `target/tests/lab5/` 与 `target/tests/`；测试有界等待并主动结束 QEMU。TESTING/LAB5_TEST 的测试入口不会进入默认镜像。Lab 4 的单 hart 测试在 Lab 5 按课程要求改为验证拒绝 CPUNUM=1；原单 hart 基线仍保存在 `lab-4` 分支。
 
-六个测试镜像还验证内核物理页池耗尽、页表映射和 walker 的分配失败回滚，以及首进程各分配阶段的失败回收。回收前后核对内核和用户空闲页计数，并验证旧映射不受影响、半初始化进程没有发布。内核只读段权限和内核栈保护页也由页表断言检查。页表映射提交和回滚只检查本次修改范围，并验证其他子树保持不变。测试宏 `LAB4_TEST` 下的专用调用号 98/99 仅用于报告寄存器检查和读取 tick；默认镜像不包含它们。
+## VF2 验收边界
 
-增量构建检查包括无修改时产物不重建、TESTING 开关生效且默认镜像无测试代码、链接选项变化触发重建；验收不再依赖每次强制重编译。
+当前已经完成 VF2 参考配置构建、Image 头/链接布局检查，以及 Ubuntu 宿主的实际 UART/PLIC 访问探针。**尚未进行本轮 VF2 实板启动及端到端验收。** 2026-10-22 用户确认暂时无法接线，先交付代码与可重复验收。
 
-`make test-lab3` 禁用用户进程入口，保留对内核态启动、内存、时钟及串口的验收。测试构建和串口日志保存于 `target/tests/<场景>/`；有限等待后主动终止 QEMU，内核主循环本身不退出。
+参考配置为 RAM 基址 0x40000000、加载地址 0x40200000、管理窗口结束 0x48200000、U74 hart1..4、4MHz timebase。每次上板前仍须核对实际 DTB、U-Boot 内存和保留区，确认管理窗口不覆盖固件或 DTB；继承固件串口配置。正常运行不自动 saveenv、不刷写固件。平台常量来源、待验项目及已验证结果见 [开发与验收记录](docs/LAB5_VALIDATION.md)。
 
-测试没有操作开发板；当前实现及验收面向 QEMU。课程参考代码、个人实现和测试均保留在同一仓库历史中。
+规格位于 `spec/`；实施路线见 [开发计划](docs/LAB5_PLAN.md)。后续修改以当前完整契约为准，旧教学说明只作参考。
 
 ---
 
