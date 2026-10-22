@@ -1,6 +1,8 @@
 PLATFORM ?= qemu
-ifneq ($(filter $(PLATFORM),qemu vf2),$(PLATFORM))
+ifneq ($(PLATFORM),qemu)
+ifneq ($(PLATFORM),vf2)
 $(error unsupported PLATFORM: $(PLATFORM))
+endif
 endif
 CPUNUM ?= 2
 ifneq ($(CPUNUM),2)
@@ -37,8 +39,7 @@ ifneq ($(DETECTED_TOOLPREFIX),)
 TOOLPREFIX = $(DETECTED_TOOLPREFIX)
 endif
 
-# 配置CPU核心数量
-CPUNUM ?= 2
+# QEMU核数已在文件开头校验；NCPU由平台头文件定义。
 # 定义目标文件输出目录
 TARGET ?= target/$(PLATFORM)
 # 定义各模块路径
@@ -198,7 +199,7 @@ test-lab4:
 test-lab3:
 	python3 tests/test_lab4.py --lab3
 
-.PHONY: build run clean debug test test-lab3
+.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5
 
 # 配置变化也必须重编译，避免测试宏或用户入口混入另一种镜像。
 $(TARGET)/build-config: FORCE | $(TARGET)

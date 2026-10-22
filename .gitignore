@@ -13,3 +13,6 @@ target/
 .picture/
 
 src/user/initcode.h
+
+__pycache__/
+*.pyc

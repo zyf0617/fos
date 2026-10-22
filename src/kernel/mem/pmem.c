@@ -4,7 +4,7 @@
 static alloc_region_t kern_region, user_region;
 // 每页的所有权位受其所在区域锁保护，重复释放不能破坏空闲链表。
 static uint8 allocated[PHYS_MEM_SIZE / PGSIZE];
-#ifdef LAB4_TEST
+#if defined(LAB4_TEST) || defined(LAB5_TEST)
 static int fail_after = -1;
 void pmem_test_fail_after(int count) { fail_after = count; }
 #endif
@@ -61,7 +61,7 @@ void *pmem_alloc(bool in_kernel)
     page_node_t *page;
 
     spinlock_acquire(&region->lk);
-#ifdef LAB4_TEST
+#if defined(LAB4_TEST) || defined(LAB5_TEST)
     if (fail_after == 0)
     {
         spinlock_release(&region->lk);

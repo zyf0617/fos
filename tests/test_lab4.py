@@ -115,11 +115,11 @@ def check_incremental_build():
 
 
 def check_panic(name, scenario):
-    target = build(name, TESTING=1, SCENARIO=scenario, CPUNUM=1)
+    target = build(name, TESTING=1, SCENARIO=scenario, CPUNUM=2)
     command = [os.environ.get('QEMU', 'qemu-system-riscv64'), '-machine', 'virt',
                '-bios', os.environ.get('OPENSBI', 'default'), '-kernel',
                str(target / 'kernel/kernel-qemu.elf'), '-m', '130M',
-               '-smp', '1', '-nographic']
+               '-smp', '2', '-nographic']
     process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     output = b''
@@ -179,9 +179,11 @@ def main():
         else:
             markers += [b'lab-4 user timer interrupt test passed']
         run(name, target, markers, hello_count=2, fault=fault, context=True)
-    target = build('single-hart', CPUNUM=1)
-    single = [marker for marker in base if b'cpu 1' not in marker]
-    run('single-hart', target, single, hello_count=2, harts=1)
+    result = subprocess.run(['make', 'build', 'CPUNUM=1'], cwd=ROOT,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if result.returncode == 0:
+        raise RuntimeError('Lab 5 course configuration accepted CPUNUM=1')
+    print('single-hart: intentionally rejected by Lab 5 course configuration', flush=True)
     print(f'Lab 4 acceptance passed; logs: {OUT}', flush=True)
 
 

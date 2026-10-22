@@ -29,9 +29,10 @@ functions:
     - 将 stvec 切回 kernel_vector，并将 sepc 保存到 proc.tf 的 user_to_kern_epc；不解引用已失效的 a0 虚拟地址。
     - U-mode ecall（cause=8）将保存 PC 前进4字节，按 a7 分派；SYS_helloworld 输出 proczero: hello world! 并在 a0 返回0，未知号返回-1。
     - cause=5 的异步时钟和 cause=9 的外部中断复用已有设备处理，不改变用户 PC；UART 输入由 boot_hartid 接收，以覆盖用户态中断路径。
+    - U-mode ecall先将保存PC加4再调用统一syscall，有界分发将返回值写a0；测试镜像可识别98/99探针。
+    - load/store缺页且地址处于尚未映射的合法栈区时一次补齐所有中间页，成功后更新ustack_npage并重试原PC；失败proc_return。
     post:
-    - 系统调用和已知中断通过 trap_user_return 恢复用户现场；只有系统调用改变返回值 a0 与 PC。
-    - 用户异常打印 cause/epc/stval 并调用 proc_return 停止及清理故障进程，内核继续处理中断而不 panic；内核不变量破坏才 panic。
+    - 合法系统调用/中断/栈增长恢复用户现场；未知调用返回-1，其他用户异常经proc_return清理全部动态资源并保持内核运行。
   void trap_user_return(void):
     pre:
     - S-mode、内核页表生效，cpu.proc 和全部用户映射已就绪，不持有锁；proc.tf 通过物理地址的恒等映射可访问。

@@ -15,7 +15,7 @@ rules:
 - 首进程构造完成前不得发布为运行状态；失败不留下半初始化进程。
 - 虚拟地址零页不映射；TRAMPOLINE RX 和 TRAPFRAME RW 不含 PTE_U；用户代码 RXU、栈 RWU。
 - 本阶段不引入多进程 scheduler；首进程通过 swtch 与 trap_user_return 首次进入用户态。
-- cpu.proc 只在页表、trapframe、用户栈与代码页全部就绪后写入一次；本阶段仅 boot_hartid 发布并运行 proczero。
+- cpu.proc 只在页表、trapframe、用户栈与代码页全部就绪后写入一次；本阶段仅boot_hartid 发布并运行 proczero。
 functions:
   cpu_t *mycpu(void):
     pre:
@@ -48,7 +48,7 @@ functions:
     post:
     - 用户以独立页表和栈执行；正常用户循环期间本函数不返回。
     - 构造失败回收全部临时页，cpu.proc 保持 NULL，报告失败并返回内核主循环；不 panic。
-    - 用户故障经 proc_return 恢复旧 CPU 上下文，清空 cpu.proc，回收用户资源，再回到可处理中断的内核主循环；不重启进程。
+    - 用户故障后恢复CPU上下文，清空cpu.proc，经uvm_destroy_pgtbl及节点池回收所有动态资源，trapframe恰好释放一次；启动预分配内核栈保留。
   void swtch(context_t *old, context_t *new):
     pre:
     - old/new 是互不重叠的可读写有效 context_t；目标 sp/ra 有效。

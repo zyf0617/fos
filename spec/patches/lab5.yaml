@@ -153,7 +153,7 @@ references:
 - https://docs.u-boot.org/en/latest/usage/cmd/booti.html
 - https://github.com/torvalds/linux/blob/v6.12/arch/riscv/boot/dts/starfive/jh7110.dtsi
 - https://docs.u-boot.org/en/v2024.04/board/starfive/visionfive2.html
-status: 待实现；本规格提交未宣称任何Lab5实现通过。
+status: 用户内存、syscall、QEMU实现与平台构建已接入；VF2实板待连接与现场核对，不以宿主探针代替。
 local_decisions:
 - proc_make_first保留void，构造失败或用户故障清理后允许返回，不添加noreturn。
 - 本地保留Lab4全部安全修复；按模块移植平台代码，避免模板空函数覆盖实现。

@@ -154,3 +154,4 @@ functions:
     - 当前hart的全部地址空间和ASID的本地地址转换缓存失效；其他hart不受影响。
 lab5_delta:
 - QEMU FIRST_HART=0,NCPU=2；VF2 FIRST_HART=1,NCPU=5；无效hart入口停驻，tp以物理hart索引。
+- 接入课程提供的sbi_hart_stop/remote_sfence_vma/system_reset，当前业务不调用这些接口。

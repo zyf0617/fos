@@ -9,11 +9,11 @@ owns:
 state:
   system_timer: 全局共享timer_t，包含由自旋锁保护的uint64 ticks。
   time_source: S-mode通过r_time读取时间，并通过OpenSBI TIME扩展为每个hart设置下一次绝对时间事件；内核不直接访问CLINT。
-  PLIC: 0x0c000000的外部中断控制器；UART_IRQ为10。
+  PLIC: 0x0c000000、64MiB窗口；QEMU UART_IRQ=10/context=2*h+1；VF2 IRQ=32/context=2*h。
   kernel_vector_frame: 内核栈上的256字节保存区，通用寄存器偏移与trap.S一致；sepc、sstatus由C处理函数从CSR读取。
 rules:
 - timer_create与PLIC全局初始化只由实际 boot hart 执行一次；timer_init 由每个 hart 在全局中断关闭时设置第一次事件，随后 trap_kernel_inithart 安装入口并开启中断。
-- TIMER_INTERVAL是正的硬件时间计数间隔，当前为1000000；system_timer.ticks计数boot_hartid已处理的时钟中断，不等同于墙钟时间。
+- TIMER_INTERVAL为QEMU 1000000（10MHz），VF2 400000（4MHz）；全局ticks仅由boot_hartid贡献。
 - OpenSBI在到期时向目标hart交付S-mode时钟中断；处理程序必须再次调用sbi_set_timer(r_time()+TIMER_INTERVAL)，不使用M-mode timer_vector或SSIP转发。
 - PLIC claim返回非零IRQ后，同一hart处理完毕恰好complete一次；零表示无可领取源，不complete。
 - 内核trap进入C处理函数时SSTATUS.SIE关闭；kernel_vector恢复其保存的通用寄存器并以sret返回。
@@ -59,15 +59,15 @@ functions:
     pre:
     - 全局PLIC初始化完成，tp为0..NCPU-1内的hart ID。
     effects:
-    - 向当前hart的S enable地址PLIC+0x2080+hart*0x100写入 hart0 ? 1<<10: 0；UART 只路由到运行首进程的 boot_hartid。
-    - 向S threshold地址PLIC+0x201000+hart*0x2000写入0。
+    - 清当前S-context的5个enable字；仅boot_hartid在IRQ/32槽置1u<<(IRQ%32)，辅助hart禁用UART。
+    - 当前S-context threshold设为0；context按平台确定。
     post:
     - 仅 boot_hartid 的监督者 PLIC context 可领取 UART 中断，其他 hart 不领取该源。
   int plic_claim(void);:
     pre:
     - 当前hart的监督者PLIC context已初始化。
     effects:
-    - 从PLIC+0x201004+hart*0x2000读取claim，领取一个pending源。
+    - 读取PLIC_BASE+0x200000+context*0x1000+4，领取pending源。
     post:
     - 返回所领取IRQ；0表示无源；非零源在处理后必须由同一hart完成。
   void plic_complete(int irq);:
@@ -93,7 +93,7 @@ functions:
     - 当前 hart 可处理已路由的外部中断和 timer_init 已安排的时钟中断。
   void timer_interrupt_handler(void);:
     effects:
-    - 通过sbi_set_timer(r_time()+TIMER_INTERVAL)设置当前hart的下一次时钟事件；当前hart为0时调用timer_update。
+    - 调用SBI TIME重装当前hart定时事件；仅boot_hartid调用timer_update。
     post:
     - 本次到期事件已重新安排；只有boot_hartid对共享ticks贡献一次递增。
   void external_interrupt_handler(void);:
@@ -119,4 +119,4 @@ functions:
     - ra偏移0，帧基址形式的sp偏移8，gp偏移16，tp偏移24，a0偏移72，t6偏移240。
     - tp 从保存区恢复，保持原内核 hart ID；其余已保存寄存器恢复，sp增加256后通过sret返回。
 lab5_delta:
-- ticks归属boot_hartid；UART只路由当前唯一用户运行核，VF2使用PLIC_SCONTEXT(h)=2*h-1。
+- ticks归属boot_hartid；UART只路由当前唯一用户运行核，VF2使用PLIC_SCONTEXT(h)=2*h；DT的context0仅有S7的M-mode，随后U74依次为M/S。

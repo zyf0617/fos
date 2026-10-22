@@ -1,5 +1,5 @@
 #include "mod.h"
-#include "../../user/syscall_num.h"
+#include "../syscall/mod.h"
 
 extern char trampoline[], user_vector[], user_return[], kernel_vector[];
 #ifdef LAB4_TEST
@@ -18,13 +18,8 @@ void trap_user_handler(void)
     if (cause == 8)
     {
         p->tf->user_to_kern_epc += 4;
-        if (p->tf->a7 == SYS_helloworld)
-        {
-            printf("proczero: hello world!\n");
-            p->tf->a0 = 0;
-        }
 #ifdef LAB4_TEST
-        else if (p->tf->a7 == 99)
+        if (p->tf->a7 == 99)
             p->tf->a0 = timer_get_ticks();
         else if (p->tf->a7 == 98)
         {
@@ -33,9 +28,9 @@ void trap_user_handler(void)
             printf("lab-4 user checks passed\n");
             p->tf->a0 = 0;
         }
-#endif
         else
-            p->tf->a0 = (uint64)-1;
+#endif
+            syscall();
     }
     else if (cause == (SCAUSE_INTERRUPT | SCAUSE_S_TIMER))
     {
@@ -48,6 +43,18 @@ void trap_user_handler(void)
     else if (cause == (SCAUSE_INTERRUPT | SCAUSE_S_EXTERNAL))
     {
         external_interrupt_handler();
+    }
+    else if ((cause == 13 || cause == 15) &&
+             r_stval() >= MMAP_END && r_stval() < USER_STACK_TOP - p->ustack_npage * PGSIZE)
+    {
+        int64 pages = uvm_ustack_grow(p->pgtbl, p->ustack_npage, r_stval());
+        if (pages < 0)
+        {
+            printf("lab-5 stack growth failed\n");
+            proc_return();
+        }
+        p->ustack_npage = pages;
+        printf("lab-5 stack pages=%d\n", (int)pages);
     }
     else
     {

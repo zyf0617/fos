@@ -8,7 +8,7 @@
 #define PLIC_PENDING (PLIC_BASE + 0x1000)
 #define PLIC_MENABLE(hart) (PLIC_BASE + 0x2000 + (hart) * 0x100)
 #ifdef VISIONFIVE2
-#define PLIC_SCONTEXT(hart) (2 * (hart) - 1)
+#define PLIC_SCONTEXT(hart) (2 * (hart))
 #else
 #define PLIC_SCONTEXT(hart) (2 * (hart) + 1)
 #endif

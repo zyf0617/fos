@@ -27,4 +27,15 @@ typedef long syscall_arg_t;
 #define __syscall(...) __SYSCALL_DISP(__syscall, __VA_ARGS__)
 #define syscall(...) __syscall(__VA_ARGS__)
 
+
+/* Lab 5用户封装：mmap失败为0，munmap失败为-1，长度以字节计。 */
+static inline unsigned long mmap(void *start, unsigned long len)
+{
+    return (unsigned long)syscall(SYS_mmap, start, len);
+}
+static inline int munmap(void *start, unsigned long len)
+{
+    return (int)syscall(SYS_munmap, start, len);
+}
+
 #endif // __SYSCALL_H

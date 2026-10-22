@@ -19,6 +19,7 @@ void main(void)
         print_init();
         printf("cpu %d is booting with OpenSBI!\n", (int)hartid);
         pmem_init();
+        mmap_init();
         kvm_init();
         trap_kernel_init();
         __sync_synchronize();
@@ -53,6 +54,10 @@ void main(void)
     if (hartid == boot_hartid)
     {
         mem_self_test();
+#ifdef LAB5_TEST
+        proc_self_test();
+        lab5_self_test();
+#endif
 #ifdef LAB4_TEST
         lab4_memory_test();
         proc_self_test();
@@ -64,6 +69,10 @@ void main(void)
     trap_kernel_inithart();
     if (hartid == boot_hartid)
         uart_enable_rx_interrupt();
+#ifdef LAB5_TEST
+    if (hartid != boot_hartid)
+        lab5_pool_worker();
+#endif
 
 #if defined(LAB4_TEST) && LAB4_SCENARIO >= 6 && LAB4_SCENARIO <= 8
     if (hartid == boot_hartid)

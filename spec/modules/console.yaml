@@ -15,10 +15,9 @@ rules:
 functions:
   void uart_init(void);:
     effects:
-    - 禁用 IER；设置 DLAB，分频低字节 3、高字节 0，再切换为 8 数据位、无校验、1 停止位。
-    - 向 FCR 写入 7，启用并清空收发 FIFO。
+    - 关闭IER；QEMU设置分频3、8N1；VF2保留固件波特率与LCR；FCR=7清空并开启FIFO。
     post:
-    - UART 可供轮询收发，IER_RX_ENABLE 已开启，但全局 SIE 和 PLIC 路由要在初始化后才启用。
+    - IER=0，接收中断由uart_enable_rx_interrupt在trap就绪后开放。
   void uart_putc_sync(int c);:
     effects:
     - 轮询 LSR 位 5，发送器可接受数据后向 THR 写入 c 的低 8 位。
@@ -105,5 +104,13 @@ functions:
     post:
     - 按 unsigned byte 比较，遇首个差异、NUL 或 n 字节结束；相等返回 0，否则返回首个不同字节之差。
     - n 为零返回 0 且不访问输入。
+  void uart_enable_rx_interrupt(void);:
+    pre:
+    - 本核trap入口与PLIC路由已就绪，UART时钟及初始化完成。
+    effects:
+    - 向IER写bit0，只开启RX。
+    post:
+    - 不会开启bit1的TX空中断。
 lab5_delta:
 - VF2 UART使用0x10000000、32位寄存器且步长4，IRQ=32；继承固件波特率；init只禁用RX，等trap就绪后显式开放。
+- 16550 IER_RX_ENABLE=bit0、IER_TX_ENABLE=bit1；通过实际驱动宿主MMIO探针核对。

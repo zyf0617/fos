@@ -4,36 +4,44 @@ owns:
 - src/kernel/boot/start.c
 - src/kernel/main.c
 state:
-  CPU_stack: 每hart 4096字节的早期栈数组，整体16字节对齐；有效hart ID为0..NCPU-1，当前NCPU为2。
+  CPU_stack: 按物理hart索引，每槽4096字节、整体16字节对齐；QEMU有效0..1，VF2有效1..4。
   init_state: 实际 boot hart 完成共享初始化后发布；其他hart在使用共享页表和trap状态前等待该标志。
-  firmware_handoff: OpenSBI以S-mode进入_entry，a0为hart ID，a1为DTB地址或HSM opaque；本内核不解析a1。
+  firmware_handoff: OpenSBI以S-mode首次进入_entry，a0=有效hart，a1=DTB；HSM使用_entry_secondary且不重新清BSS。
 rules:
-- 共享模块只由原子选出的 boot hart 初始化一次；所有有效hart都安装自己的页表和trap环境。
+- 首次有效_entry记录的boot_hartid独自初始化共享模块；所有有效hart安装各自页表与trap环境。
 - M-mode CSR、PMP、异常委派和CLINT由OpenSBI管理；内核不得直接配置或访问这些机器态资源。
 - OpenSBI 可初始启动任意有效 hart，由该 boot hart 通过 SBI HSM 启动其余 hart；HSM返回错误属于不可继续的启动失败。
 functions:
   _entry:
     pre:
-    - OpenSBI在0x80200000以S-mode进入，a0中的hart ID位于0..NCPU-1。
+    - 固件仅让一个有效hart首次进入平台入口，其他hart等待HSM。
     effects:
-    - 先验证 a0<NCPU，非法编号在无栈的 wfi 循环中停止；有效编号以a0选择CPU_stack中的4096字节槽并把sp设置为该槽顶端，保持a0作为start的hartid参数。
+    - 先关闭SIE与sie并验证FIRST_HART<=a0<NCPU；清BSS后记录boot_hartid，再选择独立CPU_stack调用start。
     post:
-    - 当前hart使用独立早期栈调用start(hartid)；若start意外返回则停在wfi循环。
+    - 无效hart在访问共享数组和栈之前停驻；VF2跳过64字节Image头，入口与链接地址一致。
   void start(uint64 hartid):
     pre:
-    - 由_entry在S-mode调用，hartid来自OpenSBI且位于0..NCPU-1。
+    - 由首次或次级入口调用，FIRST_HART<=hartid<NCPU。
     effects:
     - 将satp清零并执行sfence.vma，把hartid写入tp，然后调用main。
     post:
     - main开始时仍在S-mode和bare地址转换状态，tp稳定保存当前hart ID；start不执行mret且不返回。
   void main(void):
     effects:
-    - 原子选出的 boot hart 初始化打印、物理内存、内核页表和全局 trap，发布 init_state=2，并通过 sbi_hart_start 启动其余 hart。
+    - boot_hartid初始化打印、物理内存、mmap池、内核页表及全局trap；发布init_state=2，经_entry_secondary启动辅助hart。
     - 每个hart安装内核页表、本地PLIC与stvec环境，使用SBI TIME设置首次定时事件并开启中断。
+    - 本地timer和trap就绪后由启动核开放UART RX，随后进入唯一用户进程；测试镜像可先运行资源与并发自检。
     post:
     - boot hart 在共享初始化完成前不启动其余 hart；每次HSM调用均检查sbi_ret_t.error。
     - boot_hartid完成本地执行环境后调用proc_make_first；其他hart等待 init_state=2后完成本地初始化并停在可处理中断的wfi循环。
     - 每个hart恰好输出一次带OpenSBI的启动提示；共享初始化仅由 boot hart 执行，首进程仅由 boot_hartid 创建。
     - 主流程不返回。
+  _entry_secondary:
+    pre:
+    - 由HSM以有效hartid进入；共享状态已由boot_hartid初始化。
+    effects:
+    - 关闭中断、验证hart，选择独立栈并调用start，不清BSS或重写boot_hartid。
+    post:
+    - 保留共享初始化结果；无效hart停驻。
 lab5_delta:
 - 首次_entry验证hart并清BSS后记录boot_hartid；HSM使用_entry_secondary不清BSS；先初始化mmap及trap，最后开放UART RX。

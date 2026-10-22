@@ -128,6 +128,7 @@ void vm_unmappages(pgtbl_t root, uint64 va, uint64 len, bool freeit)
         pte_t *pte = vm_getpte(root, va + offset, false);
         uint64 page = PTE_TO_PA(*pte);
         *pte = 0;
+        sfence_vma();
         if (freeit)
             pmem_free(page, check_inkernel(page));
     }
@@ -209,4 +210,33 @@ void vm_print(pgtbl_t pgtbl)
             }
         }
     }
+}
+
+// src已经完整准备，且与dst没有叶项冲突；提交过程不再申请资源。
+static void merge_user_tree(pgtbl_t dst, pgtbl_t src, int level)
+{
+    for (int i = 0; i < 512; i++)
+    {
+        if (!(src[i] & PTE_V))
+            continue;
+        if (!(dst[i] & PTE_V))
+        {
+            dst[i] = src[i];
+            src[i] = 0;
+        }
+        else
+        {
+            assert(level > 0 && PTE_CHECK(dst[i]) && PTE_CHECK(src[i]),
+                   "vm_merge_user: conflicting leaf");
+            merge_user_tree((pgtbl_t)PTE_TO_PA(dst[i]),
+                            (pgtbl_t)PTE_TO_PA(src[i]), level - 1);
+        }
+    }
+}
+
+void vm_merge_user(pgtbl_t dst, pgtbl_t src)
+{
+    assert(dst && src && dst != src, "vm_merge_user: invalid trees");
+    merge_user_tree(dst, src, 2);
+    sfence_vma();
 }

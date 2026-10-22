@@ -67,6 +67,7 @@ typedef struct trapframe
 
 // 外部结构体
 typedef uint64 *pgtbl_t;
+typedef struct mmap_region mmap_region_t;
 
 // 进程
 typedef struct proc
@@ -75,6 +76,7 @@ typedef struct proc
 
     pgtbl_t pgtbl;       // 用户态页表
     uint64 heap_top;     // 用户堆顶(以字节为单位)
+    mmap_region_t *mmap;
     uint64 ustack_npage; // 用户栈占用的页面数量
     trapframe_t *tf;     // 用户态内核态切换时的运行环境暂存空间
 

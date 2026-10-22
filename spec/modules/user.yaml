@@ -15,9 +15,9 @@ functions:
     - 经 ecall 发起 SYS_helloworld，返回内核结果。
   int main(void):
     effects:
-    - 发起两次系统调用。
+    - 默认镜像展示hello、数组往返、字符串、brk、多页栈、mmap/munmap后报告demo PASS并循环。
     post:
-    - 连续两次调用 helloworld 后保持用户态循环，供时钟和 UART 中断恢复；两次调用均返回0，不返回。
+    - 仍保持一页代码链接约束；测试镜像隔离场景并验证失败及动态资源回收。
 lab5_delta:
 - 默认用户演示copy、brk、多页栈及mmap/munmap后循环，syscall编号0..7统一。
 - 测试场景分离镜像，保留用户代码一页断言；未知调用返回-1，失败不进行未授权访问。

@@ -5,12 +5,11 @@ owns:
 - kernel.ld
 - user.ld
 state:
-  target: target目录保存内核与用户目标文件及依赖；CPUNUM 在 Makefile 中配置，并通过 -DNCPU 同步到 C 与汇编；TIMER_INTERVAL 在 trap/type.h 中配置。
+  target: 默认target/<platform>隔离内核、用户镜像及依赖；TARGET可为隔离测试覆盖；QEMU CPUNUM固定2，NCPU/FIRST_HART取平台头文件。
 rules:
 - 显式指定 -march=rv64gc_zicsr_zifencei 与 -mabi=lp64d，避免工具链默认ISA不含 fence.i 或 CSR 指令；依赖文件使用 -MMD -MP，仅跟踪项目头文件并容忍旧头文件被移除。
-- 使用 freestanding RV64GC/lp64d C 与汇编，不链接宿主标准库；CPUNUM 与 NCPU 由同一构建选项决定，默认均为2，单 hart 与双 hart 均有回归。
-- OpenSBI占用0x80000000起的前2MiB，内核入口_entry链接到0x80200000；trampoline 单独页对齐且不超过4096字节；KERNEL_DATA 位于页对齐的 rodata 末尾，保证只读段不被数据区
-  RW 映射覆盖。
+- 使用freestanding RV64GC/lp64d C与汇编，无宿主标准库；QEMU双hart，VF2物理hart槽1..4，数组NCPU=5。
+- 平台入口QEMU=0x80200000、VF2=0x40200000；trampoline单页；KERNEL_DATA位于页对齐rodata末尾。
 - QEMU提供130MiB物理内存，内核只管理[0x80200000, 0x88200000)的128MiB，不覆盖OpenSBI。
 - 用户 main 使用显式入口段及链接脚本从 USER_BASE=0x1000 开始；无编译优化或重排参数依赖。
 targets:
@@ -20,7 +19,7 @@ targets:
     effects:
     - 构建用户ELF、二进制与内嵌数据，编译内核并链接。
     post:
-    - 生成可由 QEMU 加载的 kernel-qemu.elf；编译或链接失败停止并返回非零。
+    - 按平台生成kernel-qemu.elf或kernel-vf2.elf，VF2另生成带Image头的kernel-vf2.bin；失败返回非零。
     - 内嵌 initcode 及长度来自本次用户二进制；C/汇编/头文件变化触发相关目标增量重建；编译/链接工具、编译/链接选项与 CPU 数量变化也更新构建配置并重建，无变化时不重编译。
   run:
     pre:
@@ -28,7 +27,7 @@ targets:
     effects:
     - 先构建镜像，再启动 QEMU。
     post:
-    - 用 QEMU virt、130MiB内存、-bios default和所选CPUNUM启动该镜像，OpenSBI在S-mode跳转到内核，串口连接标准输入输出。
+    - QEMU使用virt、130MiB、双hart及OPENSBI指定固件（默认default）；VF2的run/debug直接失败并提示使用U-Boot booti。
   clean:
     effects:
     - 移除所选 TARGET 目录与其生成的 initcode.h。
@@ -37,4 +36,4 @@ targets:
 lab5_delta:
 - PLATFORM仅qemu/vf2；QEMU固定CPUNUM=2；产物默认target/<platform>，测试可覆盖TARGET且自行按平台隔离。
 - 生成平台链接脚本，VF2生成Image头binary，入口0x40200000，128MiB管理窗口；vf2 run/debug拒绝并提示booti。
-- 保留配置变化重编译、MMD/MP和显式ISA；测试代码只在TESTING镜像中出现。
+- 保留配置变化重编译、MMD/MP与显式ISA；测试代码仅在TESTING或LAB5_TEST镜像出现。

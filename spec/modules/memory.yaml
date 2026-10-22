@@ -5,7 +5,7 @@ owns:
 - src/kernel/mem/type.h
 - src/kernel/mem/method.h
 state:
-  physical_layout: QEMU物理内存为[0x80000000, 0x88200000)；OpenSBI占用前2MiB，KERNEL_BASE为0x80200000，可分配区由ALLOC_BEGIN和ALLOC_END界定。
+  physical_layout: QEMU RAM基址0x80000000/内核0x80200000；VF2参考RAM基址0x40000000/内核0x40200000；管理窗口均内核基址起128MiB，实板保留区须另核对。
   kern_region: 从页对齐的ALLOC_BEGIN开始、长度为KERN_PAGES个PGSIZE的区域，提供页表与内核页；当前KERN_PAGES为1024。
   user_region: 紧接kern_region直到页对齐的ALLOC_END，提供用户页。
   page_node_t.next: 空闲页开头的链表指针，页面分配后由调用者占用。
@@ -74,6 +74,7 @@ functions:
     - freeit 为 true 时目标物理页为调用者独占的已分配页；映射已停止使用且所需 TLB 失效完成。
     effects:
     - 清除范围内所有叶项；freeit 为 true 时将各物理页归还其所属分配区域。
+    - 逐页清叶项后先执行本地sfence.vma再归还物理页；辅助hart不运行该用户地址空间。
     post:
     - 目标叶项为零，范围外映射不变；freeit 为 false 时不归还物理页；中间页表页保留。
     - 违反已映射范围或页所有权约定时 panic。
@@ -116,6 +117,13 @@ functions:
     - 在对应区域锁下读取可分配页计数。
     post:
     - 返回当前空闲页数，不改变页所有权；用于故障回滚和资源回收验收。
+  void vm_merge_user(pgtbl_t dst, pgtbl_t src);:
+    pre:
+    - 两棵独占4KiB页表，src仅含准备好的用户映射；dst同范围无有效叶项。
+    effects:
+    - 递归无分配合并，缺失dst分支直接转移src分支所有权；重合中间层递归处理；完成后本地sfence.vma。
+    post:
+    - 用户页及捐献页表页由dst持有；src可freewalk回收剩余空中间页；冲突属于调用者不变量错误。
 lab5_delta:
 - VF2叶PTE加PTE_A|PTE_D，非叶无平台位；vm_mappages输入权限仍只接受R/W/X/U。
 - vm_merge_user把独占临时页表中无冲突用户映射无分配地合并到目标，转移页表页/物理页所有权。

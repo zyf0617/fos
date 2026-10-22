@@ -32,6 +32,27 @@ __attribute__((section(".text.entry"))) int main(void)
 #else
     syscall(SYS_helloworld);
     syscall(SYS_helloworld);
+    int values[5];
+    if (syscall(SYS_copyout, values) != 5 || syscall(SYS_copyin, values, 5) != 0)
+        goto demo_failed;
+    syscall(SYS_copyinstr, "hello, Lab 5");
+    unsigned long heap = syscall(SYS_brk, 0);
+    if (syscall(SYS_brk, heap + 9 * 4096) != heap + 9 * 4096 ||
+        syscall(SYS_brk, heap + 4 * 4096) != heap + 4 * 4096)
+        goto demo_failed;
+    volatile char large[4 * 4096];
+    large[0] = 'a';
+    large[sizeof(large) - 1] = 'z';
+    if (large[0] != 'a' || large[sizeof(large) - 1] != 'z') goto demo_failed;
+    unsigned long area = syscall(SYS_mmap, 0, 3 * 4096);
+    if (!area) goto demo_failed;
+    *(volatile int *)area = 2026;
+    if (*(volatile int *)area != 2026 || syscall(SYS_munmap, area, 3 * 4096) != 0)
+        goto demo_failed;
+    syscall(SYS_printf, "lab-5 demo PASS\n");
+    while (1) asm volatile("" ::: "memory");
+demo_failed:
+    syscall(SYS_printf, "lab-5 demo FAILED\n");
 #endif
     while (1)
         asm volatile("" ::: "memory");
