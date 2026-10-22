@@ -11,6 +11,7 @@ void uart_init(void)
   	// 关闭中断
 	WriteReg(IER, 0x00);
 
+	#ifndef VISIONFIVE2
 	// 进入设置比特率的模式
 	WriteReg(LCR, LCR_BAUD_LATCH);
 
@@ -21,10 +22,16 @@ void uart_init(void)
 	// 设置传输字节长度为8bit,不校验
 	WriteReg(LCR, LCR_EIGHT_BITS);
 
+	#endif
 	// 清零和使能FIFO模式
 	WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
 
 	// 当前是同步输出，只需要RX中断。持续开启TX空中断会造成中断风暴。
+	WriteReg(IER, 0);
+}
+
+void uart_enable_rx_interrupt(void)
+{
 	WriteReg(IER, IER_RX_ENABLE);
 }
 

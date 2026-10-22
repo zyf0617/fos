@@ -39,10 +39,15 @@ typedef struct alloc_region
 */
 
 // 内核基地址
+#ifdef VISIONFIVE2
+#define PHYS_MEM_BASE 0x40000000ul
+#define KERNEL_BASE 0x40200000ul
+#else
 #define PHYS_MEM_BASE 0x80000000ul
+#define KERNEL_BASE 0x80200000ul
+#endif
 #define PHYS_MEM_SIZE (130ul * 1024 * 1024)
 #define PHYS_MEM_END (PHYS_MEM_BASE + PHYS_MEM_SIZE)
-#define KERNEL_BASE 0x80200000ul
 
 // from kernel.ld
 extern char KERNEL_DATA[];
@@ -129,3 +134,21 @@ typedef pte_t *pgtbl_t;
 #define TRAPFRAME (TRAMPOLINE - PGSIZE)
 #define KSTACK(i) (TRAMPOLINE - ((uint64)(i) + 1) * 2 * PGSIZE)
 #define USER_BASE PGSIZE
+
+#define USER_HEAP_BASE (2ul * PGSIZE)
+#define USER_STACK_TOP TRAPFRAME
+#define MMAP_END (TRAPFRAME - 16ul * 1024 * 1024)
+#define MMAP_BEGIN (MMAP_END - 64ul * 1024 * 1024)
+#define N_MMAP 256
+#ifdef VISIONFIVE2
+#define PTE_MACHINE (PTE_A | PTE_D)
+#else
+#define PTE_MACHINE 0
+#endif
+
+typedef struct mmap_region {
+    uint64 begin;
+    uint32 npages;
+    int perm;
+    struct mmap_region *next;
+} mmap_region_t;

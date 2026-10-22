@@ -13,6 +13,7 @@ void print_panic_test(int scenario);
 /* uart.c: UART驱动函数 */
 
 void uart_init(void);
+void uart_enable_rx_interrupt(void);
 void uart_putc_sync(int c);
 void uart_putc_panic(int c);
 int uart_getc_sync(void);

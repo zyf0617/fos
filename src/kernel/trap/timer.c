@@ -23,7 +23,7 @@ void timer_update(void)
 {
     uint64 ticks;
 
-    assert(mycpuid() == 0, "timer_update: only hart 0 may update ticks");
+    assert((uint64)mycpuid() == boot_hartid, "timer_update: only hart 0 may update ticks");
     spinlock_acquire(&system_timer.lk);
     system_timer.ticks++;
     ticks = system_timer.ticks;

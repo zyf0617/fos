@@ -139,6 +139,6 @@ void timer_interrupt_handler(void)
     if (ret.error != SBI_SUCCESS)
         panic("timer_interrupt_handler: sbi_set_timer failed");
 
-    if (mycpuid() == 0)
+    if ((uint64)mycpuid() == boot_hartid)
         timer_update();
 }

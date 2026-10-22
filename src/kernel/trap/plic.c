@@ -10,9 +10,12 @@ void plic_init(void)
 void plic_inithart(void)
 {
     int hartid = mycpuid();
-    assert(hartid >= 0 && hartid < NCPU, "plic_inithart: invalid hart id");
+    assert(hartid >= FIRST_HART && hartid < NCPU, "plic_inithart: invalid hart id");
 
-    *(volatile uint32 *)PLIC_SENABLE(hartid) = hartid == 0 ? (1u << UART_IRQ) : 0;
+    for (int i = 0; i < 5; i++)
+        *(volatile uint32 *)(PLIC_SENABLE(hartid) + 4 * i) = 0;
+    *(volatile uint32 *)(PLIC_SENABLE(hartid) + 4 * (UART_IRQ / 32)) =
+        (uint64)hartid == boot_hartid ? (1u << (UART_IRQ % 32)) : 0;
     *(volatile uint32 *)PLIC_SPRIORITY(hartid) = 0;
 }
 

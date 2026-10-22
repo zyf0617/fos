@@ -25,13 +25,21 @@
 #define LSR_TX_IDLE (1 << 5)    // THR can accept another character to send
 
 // 读写寄存器的宏定义
-#define Reg(reg) ((volatile unsigned char *)(UART_BASE + reg))
+#ifdef VISIONFIVE2
+#define Reg(reg) ((volatile uint32 *)(UART_BASE + 4ul * (reg)))
+#else
+#define Reg(reg) ((volatile unsigned char *)(UART_BASE + (reg)))
+#endif
 #define ReadReg(reg) (*(Reg(reg)))
 #define WriteReg(reg, v) (*(Reg(reg)) = (v))
 
 // UART 相关
 #define UART_BASE 0x10000000ul
+#ifdef VISIONFIVE2
+#define UART_IRQ 32
+#else
 #define UART_IRQ 10
+#endif
 
 typedef struct cpu
 {

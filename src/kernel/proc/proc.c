@@ -62,7 +62,7 @@ static bool construct_first(first_resources_t *r)
     memmove((void *)r->code, target_user_initcode, target_user_initcode_len);
     // 新写入的代码页会由取指单元使用。
     asm volatile("fence.i" ::: "memory");
-    p->pid = 0;
+    p->pid = FIRST_HART;
     p->heap_top = USER_BASE + PGSIZE;
     p->ustack_npage = 1;
     p->tf->user_to_kern_epc = USER_BASE;
@@ -79,7 +79,7 @@ failed:
 void proc_make_first(void)
 {
     cpu_t *cpu = mycpu();
-    assert(mycpuid() == 0 && cpu->proc == NULL, "proc_make_first: invalid owner");
+    assert((uint64)mycpuid() == boot_hartid && cpu->proc == NULL, "proc_make_first: invalid owner");
     int was_enabled = intr_get();
     intr_off();
     uint32 kernel_before = pmem_available(true);

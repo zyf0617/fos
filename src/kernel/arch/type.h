@@ -1,5 +1,16 @@
 #pragma once
 
+#ifdef VISIONFIVE2
+#define NCPU 5
+#define FIRST_HART 1
+#else
+#ifndef NCPU
+#define NCPU 2
+#endif
+#define FIRST_HART 0
+#endif
+
+#ifndef __ASSEMBLER__
 /* 基本类型定义 */
 
 typedef char int8;
@@ -35,6 +46,9 @@ typedef enum
 #define NCPU 2 // 默认双hart，由构建配置同步覆盖
 #endif
 _Static_assert(NCPU > 0, "NCPU must be positive");
+
+extern uint64 boot_hartid;
+#endif /* !__ASSEMBLER__ */
 
 /* SBI Hart State Management extension */
 #define SBI_SUCCESS 0

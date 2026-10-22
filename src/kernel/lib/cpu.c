@@ -5,7 +5,7 @@ static cpu_t cpus[NCPU];
 cpu_t *mycpu(void)
 {
     uint64 hartid = r_tp();
-    assert(hartid < NCPU, "mycpu: invalid hart id");
+    assert(hartid >= FIRST_HART && hartid < NCPU, "mycpu: invalid hart id");
     return &cpus[hartid];
 }
 

@@ -100,7 +100,7 @@ int vm_mappages(pgtbl_t root, uint64 va, uint64 pa, uint64 len, int perm)
         pte_t *pte = walk(root, va + done, true, true);
         if (pte == NULL)
             break;
-        *pte = PA_TO_PTE(pa + done) | perm | PTE_V;
+        *pte = PA_TO_PTE(pa + done) | perm | PTE_V | PTE_MACHINE;
     }
     bool success = done == size;
     if (!success)
