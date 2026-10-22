@@ -9,7 +9,8 @@ state:
 rules:
 - 显式指定 -march=rv64gc_zicsr_zifencei 与 -mabi=lp64d，避免工具链默认ISA不含 fence.i 或 CSR 指令；依赖文件使用 -MMD -MP，仅跟踪项目头文件并容忍旧头文件被移除。
 - 使用 freestanding RV64GC/lp64d C 与汇编，不链接宿主标准库；CPUNUM 与 NCPU 由同一构建选项决定，默认均为2，单 hart 与双 hart 均有回归。
-- OpenSBI占用0x80000000起的前2MiB，内核入口_entry链接到0x80200000；trampoline 单独页对齐且不超过4096字节；KERNEL_DATA 位于页对齐的 rodata 末尾，保证只读段不被数据区 RW 映射覆盖。
+- OpenSBI占用0x80000000起的前2MiB，内核入口_entry链接到0x80200000；trampoline 单独页对齐且不超过4096字节；KERNEL_DATA 位于页对齐的 rodata 末尾，保证只读段不被数据区
+  RW 映射覆盖。
 - QEMU提供130MiB物理内存，内核只管理[0x80200000, 0x88200000)的128MiB，不覆盖OpenSBI。
 - 用户 main 使用显式入口段及链接脚本从 USER_BASE=0x1000 开始；无编译优化或重排参数依赖。
 targets:
@@ -33,3 +34,7 @@ targets:
     - 移除所选 TARGET 目录与其生成的 initcode.h。
     post:
     - 删除所选 TARGET 构建产物，保留源码、规格和无关文件。
+lab5_delta:
+- PLATFORM仅qemu/vf2；QEMU固定CPUNUM=2；产物默认target/<platform>，测试可覆盖TARGET且自行按平台隔离。
+- 生成平台链接脚本，VF2生成Image头binary，入口0x40200000，128MiB管理窗口；vf2 run/debug拒绝并提示booti。
+- 保留配置变化重编译、MMD/MP和显式ISA；测试代码只在TESTING镜像中出现。

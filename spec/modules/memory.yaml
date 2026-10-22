@@ -109,7 +109,6 @@ functions:
     - 递归回收各级页表页及根；所有叶项映射的物理页由调用者另行管理，不释放它们。
     post:
     - NULL无操作；非NULL页表不再可访问，原叶项物理页的内容与所有权不变。
-
   uint32 pmem_available(bool in_kernel):
     pre:
     - 物理分配器已初始化。
@@ -117,3 +116,6 @@ functions:
     - 在对应区域锁下读取可分配页计数。
     post:
     - 返回当前空闲页数，不改变页所有权；用于故障回滚和资源回收验收。
+lab5_delta:
+- VF2叶PTE加PTE_A|PTE_D，非叶无平台位；vm_mappages输入权限仍只接受R/W/X/U。
+- vm_merge_user把独占临时页表中无冲突用户映射无分配地合并到目标，转移页表页/物理页所有权。

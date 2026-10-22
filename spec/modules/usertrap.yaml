@@ -22,18 +22,16 @@ functions:
     - 用户现场完整保存在 trapframe 中且此后不再使用用户页表；进入处理入口时 sp 为当前进程内核栈顶、tp 为 hart ID、satp 为内核页表。
     - 进入处理入口时 a0 仍为 TRAPFRAME，该地址在内核页表中无效，处理函数不得解引用它，只能经 proc.tf 访问同一页。
     - 保存过程只使用 sscratch 和 trapframe 且不修改其前五槽，不读写其他内核对象。
-
   void trap_user_handler(void):
     pre:
     - user_vector 已恢复内核页表、进程内核栈和 hart ID；trap 来自 U-mode，全局 SIE 关闭，当前 cpu.proc 与 trapframe 有效。
     effects:
     - 将 stvec 切回 kernel_vector，并将 sepc 保存到 proc.tf 的 user_to_kern_epc；不解引用已失效的 a0 虚拟地址。
     - U-mode ecall（cause=8）将保存 PC 前进4字节，按 a7 分派；SYS_helloworld 输出 proczero: hello world! 并在 a0 返回0，未知号返回-1。
-    - cause=5 的异步时钟和 cause=9 的外部中断复用已有设备处理，不改变用户 PC；UART 输入由 hart0 接收，以覆盖用户态中断路径。
+    - cause=5 的异步时钟和 cause=9 的外部中断复用已有设备处理，不改变用户 PC；UART 输入由 boot_hartid 接收，以覆盖用户态中断路径。
     post:
     - 系统调用和已知中断通过 trap_user_return 恢复用户现场；只有系统调用改变返回值 a0 与 PC。
     - 用户异常打印 cause/epc/stval 并调用 proc_return 停止及清理故障进程，内核继续处理中断而不 panic；内核不变量破坏才 panic。
-
   void trap_user_return(void):
     pre:
     - S-mode、内核页表生效，cpu.proc 和全部用户映射已就绪，不持有锁；proc.tf 通过物理地址的恒等映射可访问。
@@ -43,7 +41,6 @@ functions:
     - 以运行时地址 TRAMPOLINE+(user_return-trampoline) 调用汇编入口，参数为 TRAPFRAME 和 MAKE_SATP(proc.pgtbl)。
     post:
     - 经 user_return 切换用户页表并 sret 进入 U-mode，用户寄存器恢复且 sscratch=TRAPFRAME；本函数不返回。
-
   user_return:
     pre:
     - 由 trap_user_return 在 TRAMPOLINE 中以 (TRAPFRAME, MAKE_SATP(proc.pgtbl)) 调用；调用时内核页表有效，用户寄存器已保存在 trapframe 中。
@@ -54,3 +51,5 @@ functions:
     post:
     - 用户以 trapframe 中的寄存器、PC 与栈继续执行；satp 为用户页表，sscratch 复位为 TRAPFRAME。
     - 本入口不返回；下一次用户 trap 由 user_vector 在同一 trapframe 上重新保存现场。
+lab5_delta:
+- ecall推进epc一次后调用统一syscall；仅load/store缺页落在合法未映射栈区时扩栈并重试，其他用户异常沿用proc_return清理。

@@ -1,0 +1,117 @@
+module: kernel/uvm
+owns:
+- src/kernel/mem/uvm.c
+- src/kernel/mem/mmap.c
+state:
+  用户页表: 独占用户数据页及页表页；trampoline物理页和trapframe物理页由其他所有者持有。
+  用户地址布局: PGSIZE=4096；USER_BASE=PGSIZE；USER_HEAP_BASE=2*PGSIZE；USER_STACK_TOP=TRAPFRAME；MMAP_END=TRAPFRAME-16MiB；MMAP_BEGIN=MMAP_END-64MiB；区间均左闭右开。
+  mmap节点池: MMAP_REGION_COUNT个可复用节点；节点唯一属于空闲池、某进程链或尚未发布的操作。
+rules:
+- 地址和长度运算先检查上界及溢出，再进行加法、乘法或页对齐；用户请求非法和资源耗尽返回失败，所有权、页表结构等内核不变量损坏才panic。
+- 用户页必须为有效叶项并带PTE_U；读取需要PTE_R，写入需要PTE_W；禁止通过copy访问trampoline或trapframe。
+- heap、stack、mmap及页表复制只有完整成功后才发布新状态；失败保留操作前已发布映射和元数据并释放本次临时资源，临时资源如何组织由实现决定。
+- 用户复制逐页验证后复制该页片段；后续页面失败可留下已复制前缀，不承诺回滚目标内容。
+- 每个mmap链只含非空页对齐区间，按begin递增且互不重叠；权限相同的相邻区间合并；链描述的映射必须与页表一致。
+- mmap及堆栈事务由调用者在当前进程独占地址空间修改上下文中执行；节点池分配回收受自身锁保护。
+- 用户页表销毁不释放trampoline和trapframe物理页；进程另行回收trapframe、内核栈及mmap节点，任何资源只回收一次。
+- 新建用户页通过独立临时页表准备，提交时无分配地合并；失败销毁临时树，原树逐项保持不变。
+- 映射只在当前唯一用户拥有者hart修改，辅助hart不使用用户页表；返回用户前及释放解除的物理页前执行本地sfence.vma。
+functions:
+  int uvm_copyin(pgtbl_t pgtbl, uint64 dst, uint64 src, uint32 len);:
+    pre:
+    - 内核dst至少len字节可写；页表稳定。
+    effects:
+    - 逐页验证用户src的V/U/R并复制，先检查用户范围溢出。
+    post:
+    - 成功0、失败-1；零长度不访问地址并成功；失败允许目标已有前缀。
+  int uvm_copyout(pgtbl_t pgtbl, uint64 dst, uint64 src, uint32 len);:
+    pre:
+    - 内核src至少len字节可读；页表稳定。
+    effects:
+    - 逐页验证用户dst的V/U/W并复制，不隐式分配用户页。
+    post:
+    - 成功0、失败-1；零长度成功；失败允许目标已有前缀。
+  int uvm_copyin_str(pgtbl_t pgtbl, uint64 dst, uint64 src, uint32 maxlen);:
+    pre:
+    - 内核dst至少maxlen字节可写；页表稳定。
+    effects:
+    - 逐页验证用户src的V/U/R，最多复制maxlen字节，含NUL后停止。
+    post:
+    - 范围内找到NUL返回0，否则-1；maxlen=0失败。不得预先读取NUL之后的页面。
+  uint64 uvm_heap_grow(pgtbl_t pgtbl, uint64 cur_heap_top, uint32 len);:
+    pre:
+    - cur_heap_top位于[USER_HEAP_BASE,MMAP_BEGIN]，页表由调用者独占。
+    effects:
+    - 按PGROUNDUP边界申请RWU零页；全部成功才发布；不足回滚本次页与页表。
+    post:
+    - 返回新字节堆顶，越界或不足返回0；len=0返回原值；原映射不变。
+  uint64 uvm_heap_ungrow(pgtbl_t pgtbl, uint64 cur_heap_top, uint32 len);:
+    pre:
+    - cur_heap_top位于合法堆范围；调用者独占页表。
+    effects:
+    - 验证len不下穿USER_HEAP_BASE；解除[PGROUNDUP(new),PGROUNDUP(old))，保留末尾部分页。
+    post:
+    - 成功返回新堆顶，非法返回0；解除后本地TLB失效再归还用户页。
+  int64 uvm_ustack_grow(pgtbl_t pgtbl, uint64 old_ustack_npage, uint64 fault_addr);:
+    pre:
+    - 已有old_ustack_npage个连续栈页，页表独占。
+    effects:
+    - fault_addr必须在[MMAP_END,旧栈底)；一次补齐到PGROUNDDOWN(fault_addr)的所有RWU页。
+    post:
+    - 成功返回新栈页数，非法或不足返回-1；失败页表不变；不接受已有页权限故障。
+  void uvm_destroy_pgtbl(pgtbl_t pgtbl);:
+    pre:
+    - NULL或已不活动的独占用户页表；用户物理页不与其他页别名。
+    effects:
+    - 递归释放PTE_U叶项的用户物理页及所有页表页，不释放非U特殊叶项。
+    post:
+    - NULL无操作；trapframe/trampoline物理页不释放；调用者另行回收trapframe和mmap节点。
+  int uvm_copy_pgtbl(pgtbl_t old, pgtbl_t new, uint64 heap_top, uint64 ustack_npage, mmap_region_t *mmap);:
+    pre:
+    - old/new有效且不同；new只有独立trapframe及共享trampoline；源用户映射均在代码、heap、stack、mmap声明范围内。
+    effects:
+    - 经临时页表复制全部用户叶的内容与R/W/X/U权限，物理页独立；完整成功再替换new的页表内容。
+    post:
+    - 成功0；失败-1并保持new所有PTE及特殊物理页不变；临时页全部回收；old不变。
+  void mmap_init(void);:
+    pre:
+    - 单次初始化、尚无并发使用。
+    effects:
+    - 初始化N_MMAP=256节点空闲链、所有权位及锁。
+    post:
+    - 每节点只属于池、临时操作或一个进程链。
+  mmap_region_t *mmap_region_alloc(void);:
+    pre:
+    - 节点池已初始化。
+    effects:
+    - 在池锁下取节点并清零，标记已分配。
+    post:
+    - 成功独占节点，耗尽NULL，不panic。
+  void mmap_region_free(mmap_region_t *mmap);:
+    pre:
+    - 参数是池中一个有效且已分配节点，已从进程链移除。
+    effects:
+    - 锁下校验所有权并归还。
+    post:
+    - 无效指针、重复释放panic且不破坏空闲链。
+  uint64 uvm_mmap_find(mmap_region_t *head_mmap, uint64 len, mmap_region_t **p_last_mmap, mmap_region_t **p_tmp_mmap);:
+    pre:
+    - 链稳定、有序非重叠，len非零页对齐；两个输出指针可写。
+    effects:
+    - 寻找[MMAP_BEGIN,MMAP_END)首个容纳len的空洞并输出前后节点。
+    post:
+    - 成功返回地址，失败0且输出NULL；不改链与页表。
+  uint64 uvm_mmap(uint64 begin, uint32 npages, int perm);:
+    pre:
+    - 当前进程存在并独占地址空间。
+    effects:
+    - 检查npages、begin范围及R/W/X权限；begin=0首次适配；先预留节点及事务页表，再插入区间并合并同权限相邻段。
+    post:
+    - 成功返回地址；非法、重叠或不足返回0，原页表及链不变；权限保存于节点perm，映射强制PTE_U。
+  int uvm_munmap(uint64 begin, uint32 npages);:
+    pre:
+    - 当前进程存在并独占地址空间。
+    effects:
+    - 先确认整个范围被mmap链完整覆盖及页表一致，预留中间拆分节点；再解除、裁剪或删除所有覆盖区间。
+    post:
+    - 成功0，非法、含空洞或节点不足-1；失败原链和映射不变；本地TLB失效后回收物理页。
