@@ -19,6 +19,14 @@ void trap_user_handler(void)
     if (cause == 8)
     {
         p->tf->user_to_kern_epc += 4;
+#ifdef PROC_TEST
+        if (p->tf->a7 == 200)
+        {
+            pmem_test_fail_after((int)p->tf->a0);
+            p->tf->a0 = 0;
+        }
+        else
+#endif
 #ifdef LAB4_TEST
         if (p->tf->a7 == 99)
             p->tf->a0 = timer_get_ticks();
@@ -84,7 +92,12 @@ void trap_user_return(void)
     tf->user_to_kern_hartid = r_tp();
     w_stvec(TRAMPOLINE + ((uint64)user_vector - (uint64)trampoline));
     w_sepc(tf->user_to_kern_epc);
-    w_sstatus((r_sstatus() & ~(SSTATUS_SPP | (1ul << 18))) | SSTATUS_SPIE);
+    uint64 status = (r_sstatus() & ~(SSTATUS_SPP | (1ul << 18))) | SSTATUS_SPIE;
+#if PROC_LIFECYCLE
+    // 本阶段只保存整数现场；显式关闭FS/VS，禁止任务共享未保存的扩展寄存器。
+    status &= ~((3ul << 13) | (3ul << 9));
+#endif
+    w_sstatus(status);
     uint64 address = TRAMPOLINE + ((uint64)user_return - (uint64)trampoline);
     ((void (*)(uint64, uint64))address)(TRAPFRAME, MAKE_SATP(p->pgtbl));
     __builtin_unreachable();

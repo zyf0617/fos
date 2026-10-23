@@ -183,18 +183,26 @@ void proc_make_first(void)
         return;
     }
 #endif
+#if PROC_LIFECYCLE
+    proc_lifecycle_run(&first.proc);
+#else
     cpu->proc = &first.proc;
     printf("lab-4 entering user mode\n");
     swtch(&cpu->ctx, &first.proc.ctx);
     // 故障进程不再调度，当前已恢复到CPU早期栈与内核页表。
     cpu->proc = NULL;
     proc_release_resources(&first.proc);
+#endif
     assert(pmem_available(false) == user_before,
            "proc_make_first: leaked user resources");
     assert(pmem_available(true) == kernel_before,
            "proc_make_first: leaked kernel resources");
     assert(mmap_available() == nodes_before, "proc_make_first: leaked mmap nodes");
+#if PROC_LIFECYCLE
+    printf("aegis process lifecycle cleaned up\n");
+#else
     printf("lab-4 faulted process cleaned up\n");
+#endif
 #if AEGIS
     agent_boot_check();
     agent_audit_dump();
@@ -205,6 +213,9 @@ void proc_make_first(void)
 
 void proc_return(void)
 {
+#if PROC_LIFECYCLE
+    proc_exit((uint64)-1);
+#endif
     intr_off();
     cpu_t *cpu = mycpu();
     assert(cpu->proc != NULL, "proc_return: no current process");

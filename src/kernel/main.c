@@ -58,7 +58,7 @@ void main(void)
     if (hartid == boot_hartid)
     {
         mem_self_test();
-#ifdef LAB5_TEST
+#if defined(LAB5_TEST) && !defined(PROC_TEST)
         proc_self_test();
         lab5_self_test();
         proc_clone_self_test();
@@ -77,7 +77,7 @@ void main(void)
     trap_kernel_inithart();
     if (hartid == boot_hartid)
         uart_enable_rx_interrupt();
-#ifdef LAB5_TEST
+#if defined(LAB5_TEST) && !defined(PROC_TEST)
     if (hartid != boot_hartid)
         lab5_pool_worker();
 #endif

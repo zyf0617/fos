@@ -12,6 +12,23 @@ endif
 include common.mk
 .DEFAULT_GOAL := build
 
+PROC_LIFECYCLE ?= 0
+PROC_TEST ?= 0
+ifneq ($(PROC_LIFECYCLE),0)
+ifneq ($(PROC_LIFECYCLE),1)
+$(error PROC_LIFECYCLE must be 0 or 1)
+endif
+endif
+ifneq ($(PROC_TEST),0)
+ifneq ($(PROC_TEST),1)
+$(error PROC_TEST must be 0 or 1)
+endif
+ifneq ($(PROC_LIFECYCLE),1)
+$(error PROC_TEST requires PROC_LIFECYCLE=1)
+endif
+CFLAGS += -DPROC_TEST -DLAB5_TEST
+endif
+CFLAGS += -DPROC_LIFECYCLE=$(PROC_LIFECYCLE)
 BOOT_USER ?= 1
 AEGIS ?= 0
 AEGIS_AUDIT ?= $(AEGIS)
@@ -51,6 +68,9 @@ ifeq ($(AGENT_TEST),1)
 ifneq ($(AEGIS),1)
 $(error AGENT_TEST=1 requires AEGIS=1)
 endif
+ifneq ($(PROC_LIFECYCLE),0)
+$(error AGENT_TEST requires the course process path)
+endif
 CFLAGS += -DAGENT_TEST -DLAB5_TEST
 endif
 SCENARIO ?= 0
@@ -58,8 +78,13 @@ ifeq ($(PLATFORM),vf2)
 CFLAGS += -DVISIONFIVE2
 endif
 LAB5_TEST ?= 0
+ifeq ($(PROC_LIFECYCLE),1)
+ifneq ($(filter 1,$(LAB5_TEST) $(TESTING)),)
+$(error PROC_LIFECYCLE cannot use course ABI test modes)
+endif
+endif
 ifeq ($(AGENT_BENCH),1)
-ifneq ($(filter 1,$(AGENT_TEST) $(LAB5_TEST) $(TESTING)),)
+ifneq ($(filter 1,$(AGENT_TEST) $(LAB5_TEST) $(TESTING) $(PROC_TEST) $(PROC_LIFECYCLE)),)
 $(error AGENT_BENCH cannot be combined with other test modes)
 endif
 CFLAGS += -DAGENT_BENCH
@@ -122,6 +147,10 @@ ifeq ($(AGENT_BENCH),1)
 UserSourceFile = tests/agent_bench.c
 endif
 
+ifeq ($(PROC_TEST),1)
+UserSourceFile = tests/process_user.c
+endif
+
 # 生成目标文件（.o）路径列表
 KernelOBJ = $(patsubst $(KernelPath)/%.S, $(TARGET)/kernel/%.o, $(filter %.S, $(KernelSourceFile)))
 KernelOBJ += $(patsubst $(KernelPath)/%.c, $(TARGET)/kernel/%.o, $(filter %.c, $(KernelSourceFile)))
@@ -137,6 +166,10 @@ UserOBJ = $(TARGET)/user/agent_user.o
 endif
 ifeq ($(AGENT_BENCH),1)
 UserOBJ = $(TARGET)/user/agent_bench.o
+endif
+
+ifeq ($(PROC_TEST),1)
+UserOBJ = $(TARGET)/user/process_user.o
 endif
 
 # QEMU模拟器配置
@@ -233,6 +266,9 @@ $(TARGET)/user/lab5_user.o: tests/lab5_user.c | $(TARGET)
 $(TARGET)/user/agent_user.o: tests/agent_user.c | $(TARGET)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(TARGET)/user/process_user.o: tests/process_user.c | $(TARGET)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
 $(TARGET)/user/agent_bench.o: tests/agent_bench.c | $(TARGET)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -267,10 +303,13 @@ test-lab3:
 test-agent:
 	python3 tests/test_agent.py
 
+test-process:
+	python3 tests/test_process.py
+
 bench-agent:
 	python3 tests/bench_agent.py
 
-.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5 test-agent bench-agent
+.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5 test-agent test-process bench-agent
 
 # 配置变化也必须重编译，避免测试宏或用户入口混入另一种镜像。
 $(TARGET)/build-config: FORCE | $(TARGET)

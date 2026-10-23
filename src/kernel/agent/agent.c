@@ -33,10 +33,16 @@ void agent_init(void)
     filtered = 0;
 #endif
 #endif
-#ifdef AGENT_TEST
+#if defined(PROC_TEST) && LAB4_SCENARIO == 31
+    agent_group_init(&boot_group, 1, 64, PROC_SLOTS, AGENT_SYSCALL_MASK & ~(1ul << SYS_fork));
+#elif defined(PROC_TEST) && LAB4_SCENARIO == 32
+    agent_group_init(&boot_group, 1, 7, PROC_SLOTS, AGENT_SYSCALL_MASK);
+#elif defined(PROC_TEST) && LAB4_SCENARIO == 33
+    agent_group_init(&boot_group, 1, 64, 1, AGENT_SYSCALL_MASK);
+#elif defined(AGENT_TEST)
     agent_group_init(&boot_group, 1, 4, 1, AGENT_SYSCALL_MASK & ~(1ul << SYS_copyout));
 #else
-    agent_group_init(&boot_group, 1, 64, 1, AGENT_SYSCALL_MASK);
+    agent_group_init(&boot_group, 1, 64, PROC_SLOTS, AGENT_SYSCALL_MASK);
 #endif
 }
 
@@ -211,7 +217,7 @@ bool agent_allowed(proc_t *p, uint64 number)
         return true;
     agent_group_t *g = p->agent;
     spinlock_acquire(&g->lock);
-    bool allowed = number < 8 && (g->syscall_mask & (1ul << number));
+    bool allowed = number < (PROC_LIFECYCLE ? 13 : 8) && (g->syscall_mask & (1ul << number));
     if (!allowed) g->capability_denied++;
     spinlock_release(&g->lock);
     return allowed;

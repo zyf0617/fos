@@ -1,6 +1,12 @@
 #pragma once
 #include "../arch/type.h"
 
+#if PROC_LIFECYCLE
+#define PROC_SLOTS 4
+#else
+#define PROC_SLOTS 1
+#endif
+
 // 同优先级的上下文
 typedef struct context
 {

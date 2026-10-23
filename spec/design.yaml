@@ -43,9 +43,11 @@ rules:
 - 用户输入或资源不足返回服务失败；无法恢复的用户异常停止该用户程序；内核不变量错误panic。
 - 映射修改失败保留操作前映射及元数据并回收临时资源；用户copy失败允许目标已有前缀。
 - AEGIS=1可选接入agent模块的组归属、用户页预算、syscall允许集合及审计；默认AEGIS=0保留课程执行路径。
+extensions:
+  PROC_LIFECYCLE: 默认0；1启用lifecycle.yaml的协作式fork/exit/wait/yield/getpid；不代表课程Lab6完成
 non_goals:
-- 调度器与多进程生命周期
-- fork、wait、exec与文件系统
+- 默认Lab5路径的调度器与多进程生命周期
+- 默认Lab5路径的fork/wait；所有路径的exec与文件系统
 - 通过兼容层保留旧接口或编译器访问顺序规避缺页问题
 - HAL、设备框架、完整DTB解析、存储驱动及裸扇区烧录；不构建或刷写OpenSBI/U-Boot。
 mechanisms:

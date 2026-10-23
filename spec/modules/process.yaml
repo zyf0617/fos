@@ -8,15 +8,15 @@ owns:
 - src/kernel/proc/method.h
 state:
   cpus: 每hart的当前进程指针与保存的内核上下文；由OpenSBI交付并写入tp的hart ID索引，有效范围为0..NCPU-1。
-  proczero: 唯一用户进程，拥有用户页表、trapframe、用户代码页和栈页；使用预先映射的 KSTACK(0)。
+  proczero: 默认课程路径的唯一用户进程，拥有用户页表、trapframe、用户代码页和栈页；使用预先映射的 KSTACK(0)。
   context_t: 依次为 ra、sp、s0..s11 的 64 位槽；C 与 swtch 汇编布局一致。
   user_trapframe_t: 288 字节：前五槽为 kernel_satp/kernel_sp/kernel_trap/epc/kernel_hartid，其后按给定头文件排列全部用户整数寄存器；a0 偏移112，t6偏移280。
   trapframe_alias: trapframe 页在用户页表中以 TRAPFRAME 出现（RW，不含 PTE_U）；内核页表不映射 TRAPFRAME，内核经恒等映射以物理地址访问同一页，proc.tf 保存该内核可见地址。
 rules:
 - 首进程构造完成前不得发布为运行状态；失败不留下半初始化进程。
 - 虚拟地址零页不映射；TRAMPOLINE RX 和 TRAPFRAME RW 不含 PTE_U；用户代码 RXU、栈 RWU。
-- 本阶段不引入多进程 scheduler；首进程通过 swtch 与 trap_user_return 首次进入用户态。
-- cpu.proc 只在页表、trapframe、用户栈与代码页全部就绪后写入一次；本阶段仅boot_hartid 发布并运行 proczero。
+- 默认课程路径不引入多进程scheduler；PROC_LIFECYCLE扩展见lifecycle.yaml；首进程通过 swtch 与 trap_user_return 首次进入用户态。
+- cpu.proc 只在页表、trapframe、用户栈与代码页全部就绪后写入一次；默认课程路径仅boot_hartid发布并运行proczero；扩展路径在同一hart上按槽切换。
 functions:
   cpu_t *mycpu(void):
     pre:
@@ -29,7 +29,7 @@ functions:
     - 当前在S-mode，tp 保存有效 hart ID。
     effects: []
     post:
-    - 返回当前 hart 的进程指针，允许 NULL；cpu.proc 只在首进程构造完成后写入，读取无需关中断。
+    - 返回当前 hart 的进程指针，允许 NULL；默认路径只在首进程构造后发布；扩展路径只在boot hart关中断时按槽更新，不发生迁移。
   pgtbl_t proc_pgtbl_init(uint64 trapframe):
     pre:
     - trapframe 为独占、页对齐的已分配内核物理页；物理分配器与 trampoline 已初始化。
@@ -63,7 +63,7 @@ functions:
     - 设置 pid=0、heap_top=USER_BASE+PGSIZE、ustack_npage=1；初始用户 PC=USER_BASE、sp=TRAPFRAME。
     - ctx.ra 为 trap_user_return，ctx.sp 为 KSTACK(0)+PGSIZE；关中断后仅在所有资源完整时发布 cpu.proc，并通过 swtch 保存 CPU 上下文及启动进程。
     post:
-    - 用户以独立页表和栈执行；正常用户循环期间本函数不返回。
+    - 用户以独立页表和栈执行；默认路径正常用户循环期间本函数不返回；生命周期扩展在全部任务退出后返回。
     - 构造失败回收全部临时页，cpu.proc 保持 NULL，报告失败并返回内核主循环；不 panic。
     - 用户故障后恢复CPU上下文，清空cpu.proc，经uvm_destroy_pgtbl及节点池回收所有动态资源，trapframe恰好释放一次；启动预分配内核栈保留。
   void swtch(context_t *old, context_t *new):
@@ -79,6 +79,6 @@ functions:
     effects:
     - 关闭中断，通过 swtch 保存进程内核上下文并恢复首进程创建前的 CPU 上下文。
     post:
-    - 不再恢复故障用户执行，资源由恢复后的 proc_make_first 清理；本入口不返回。
+    - 不再恢复故障用户执行，默认路径由恢复后的proc_make_first清理；生命周期扩展以状态-1进入proc_exit并在调度栈上回收；本入口不返回。
 lab5_delta:
 - proc新增mmap头指针；成功构造后发布；故障清理递归回收所有用户页和mmap节点，再单独归还trapframe；启动预分配内核栈保留。

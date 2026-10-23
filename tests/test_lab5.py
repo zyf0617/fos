@@ -28,7 +28,7 @@ def build(name, **options):
     return target
 
 
-def run(name, target, markers, fault=None):
+def run(name, target, markers, fault=None, expected_user_fault=None):
     command = [os.environ.get('QEMU', 'qemu-system-riscv64'), '-machine', 'virt',
                '-bios', os.environ.get('OPENSBI', 'default'), '-kernel',
                str(target / 'kernel/kernel-qemu.elf'), '-m', '130M', '-smp', '2', '-nographic']
@@ -62,6 +62,10 @@ def run(name, target, markers, fault=None):
                 raise RuntimeError(f'{name}: wrong fault')
             if output.find(b'ticks = 10') < output.find(b'faulted process cleaned up'):
                 raise RuntimeError(f'{name}: kernel did not continue after cleanup')
+        elif expected_user_fault:
+            cause, stval = expected_user_fault
+            if f'cause=0x{cause:016x}'.encode() not in output or f'stval=0x{stval:016x}'.encode() not in output:
+                raise RuntimeError(f'{name}: wrong expected child fault')
         elif b'user fault:' in output:
             raise RuntimeError(f'{name}: unexpected user fault')
         print(f'{name}: PASS', flush=True)

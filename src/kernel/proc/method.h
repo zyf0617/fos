@@ -17,3 +17,11 @@ void proc_release_resources(proc_t *p);
 #ifdef LAB5_TEST
 void proc_clone_self_test(void);
 #endif
+
+#if PROC_LIFECYCLE
+void proc_lifecycle_run(proc_t *initial);
+uint64 proc_fork(void);
+uint64 proc_wait(uint64 status);
+void proc_yield(void);
+void proc_exit(uint64 status) __attribute__((noreturn));
+#endif

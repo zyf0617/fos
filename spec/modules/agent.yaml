@@ -1,6 +1,6 @@
 module: kernel/agent
 authority: ../../../../AegisOS_ARCHITECTURE.md
-stage: Lab5保护原型；不宣称已具备多进程调度或真实LLM运行能力
+stage: Lab5保护原型及可选协作式生命周期；不宣称抢占公平性、SMP或真实LLM运行能力
 configuration:
   AEGIS: 默认0；1启用启动组、内存收费及系统调用权限/审计钩子
   AEGIS_AUDIT: 默认等于AEGIS；0关闭事件环但保留保护；1要求AEGIS=1
@@ -9,15 +9,16 @@ configuration:
   AGENT_BENCH: 默认0；1编译相同用户微基准，禁止与其他测试镜像混用
 rules:
 - 普通未入组进程保持课程路径；课程syscall编号0至7不变，不增加用户管理ABI。
-- group由内核持有；初始化设置id、用户数据页限额、进程数限额及8位syscall允许集合；用户不能修改策略。
+- group由内核持有；初始化设置id、用户数据页限额、进程数限额及课程8位/生命周期扩展13位syscall允许集合；用户不能修改策略。
 - attach在进程独占上下文检查成员数及初始页数，成功后发布归属；重复attach或超限失败且不改变状态。
 - 当前启动进程在构造完成后以代码页和初始栈页共2页入组；页表页与trapframe不计入用户数据页预算。
 - heap、stack及mmap分配先在组锁内预留整批页数；物理分配或建表失败归还预算；解除成功后归还对应预算。
 - 每进程保留收费页数，组用量为所有成员收费之和；detach归还该成员剩余收费并清除归属，重复detach无操作。
 - 当前页预算包含已提交及尚未完成的预留；snapshot在组锁内读一致快照，峰值统计预留高水位，拒绝计数和峰值不随事务失败回滚。
 - 内核restrict接口仅允许收紧权限与上限，不能少于当前预算/成员占用；失败策略不变，用户态没有调用该接口的ABI。
-- 底层uvm_copy_pgtbl不自动收费；proc_clone_resources在复制前通过agent_attach预留子成员及全部实际用户叶页，失败销毁并detach，成功仍不发布运行状态；未来fork须另接进程槽位、内核栈及调度。
+- 底层uvm_copy_pgtbl不自动收费；proc_clone_resources在复制前通过agent_attach预留子成员及全部实际用户叶页，失败销毁并detach，成功仍不发布运行状态；PROC_LIFECYCLE开启后由proc_fork接进程槽位、私有内核栈及协作式调度。
 - syscall分派先验证64位编号，再检查允许集合；拒绝时不调用服务，mmap返回0，其他返回-1；未知编号返回-1。
+- 生命周期扩展新增事件8表示退出；exit不会返回统一分派，因此不产生完成事件3；其余编号保持不变。
 - 审计使用64事件固定环；记录序号、硬件time、组号、pid、事件种类、详情、结果和组用量；满时覆盖最旧记录并通过读取接口报告丢失数。
 - AEGIS_AUDIT=0不分配事件环，record无操作，read返回0且lost为0；额度、权限及统计继续执行。
 - quota_denied只统计组预算拒绝；allocation_failed统计通过预算预留后临时根/用户数据/中间表分配失败的事务数，回滚后计数及记录原因；两者不等同Linux的OOM killer事件。
@@ -39,7 +40,7 @@ functions:
     pre: 启动核单次执行，尚无并发事件
     post: 初始化审计锁、序号和固定启动组，测试策略与默认策略分别编译
   agent_group_init:
-    pre: 内核独占且尚无成员的存储；对象寿命覆盖所有成员；mask仅低8位
+    pre: 内核独占且尚无成员的存储；对象寿命覆盖所有成员；mask仅课程低8位或生命周期构建低13位
     post: 计数清零并设置锁与策略；不分配物理内存
   agent_attach:
     pre: 进程归属由调用者独占，initial_pages准确表示该成员已有或本次构造预留的数据页

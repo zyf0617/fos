@@ -147,23 +147,33 @@ void vm_freewalk(pgtbl_t root)
 void kvm_init(void)
 {
     pgtbl_t root = pmem_alloc(true);
-    uint64 stack = (uint64)pmem_alloc(true);
-    if (root == NULL || stack == 0 ||
+    uint64 stacks[PROC_SLOTS] = {0};
+    if (root == NULL ||
         vm_mappages(root, UART_BASE, UART_BASE, PGSIZE, PTE_R | PTE_W) ||
         vm_mappages(root, PLIC_BASE, PLIC_BASE, PLIC_SIZE, PTE_R | PTE_W) ||
         vm_mappages(root, KERNEL_BASE, KERNEL_BASE,
                     (uint64)KERNEL_DATA - KERNEL_BASE, PTE_R | PTE_X) ||
         vm_mappages(root, (uint64)KERNEL_DATA, (uint64)KERNEL_DATA,
                     PHYS_MEM_END - (uint64)KERNEL_DATA, PTE_R | PTE_W) ||
-        vm_mappages(root, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X) ||
-        vm_mappages(root, KSTACK(0), stack, PGSIZE, PTE_R | PTE_W))
+        vm_mappages(root, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X))
+        goto failed;
+    for (int i = 0; i < PROC_SLOTS; i++)
     {
-        vm_freewalk(root);
-        if (stack)
-            pmem_free(stack, true);
-        panic("kvm_init: cannot construct kernel mappings");
+        stacks[i] = (uint64)pmem_alloc(true);
+        if (!stacks[i] || vm_mappages(root, KSTACK(i), stacks[i], PGSIZE, PTE_R | PTE_W))
+            goto failed;
+        pte_t *guard = vm_getpte(root, KSTACK(i) + PGSIZE, false);
+        assert(!guard || !(*guard & PTE_V), "kvm_init: kernel stack guard mapped");
     }
     kernel_pgtbl = root;
+    return;
+failed:
+    {
+        vm_freewalk(root);
+        for (int i = 0; i < PROC_SLOTS; i++)
+            if (stacks[i]) pmem_free(stacks[i], true);
+        panic("kvm_init: cannot construct kernel mappings");
+    }
 }
 
 void kvm_inithart(void)

@@ -1,6 +1,14 @@
 #include "mod.h"
 #include "../agent/mod.h"
 
+#if PROC_LIFECYCLE
+static uint64 sys_fork(void) { return proc_fork(); }
+static uint64 sys_exit(void) { proc_exit(arg_raw(0)); }
+static uint64 sys_wait(void) { return proc_wait(arg_raw(0)); }
+static uint64 sys_yield(void) { proc_yield(); return 0; }
+static uint64 sys_getpid(void) { return myproc()->pid; }
+#endif
+
 static uint64 (*const services[])(void) = {
     [SYS_helloworld] = sys_helloworld,
     [SYS_copyin] = sys_copyin,
@@ -10,6 +18,13 @@ static uint64 (*const services[])(void) = {
     [SYS_mmap] = sys_mmap,
     [SYS_munmap] = sys_munmap,
     [SYS_printf] = sys_printf,
+#if PROC_LIFECYCLE
+    [SYS_fork] = sys_fork,
+    [SYS_exit] = sys_exit,
+    [SYS_wait] = sys_wait,
+    [SYS_yield] = sys_yield,
+    [SYS_getpid] = sys_getpid,
+#endif
 };
 
 void syscall(void)
