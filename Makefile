@@ -13,6 +13,20 @@ include common.mk
 .DEFAULT_GOAL := build
 
 BOOT_USER ?= 1
+AEGIS ?= 0
+AGENT_TEST ?= 0
+ifneq ($(AEGIS),0)
+ifneq ($(AEGIS),1)
+$(error AEGIS must be 0 or 1)
+endif
+endif
+CFLAGS += -DAEGIS=$(AEGIS)
+ifeq ($(AGENT_TEST),1)
+ifneq ($(AEGIS),1)
+$(error AGENT_TEST=1 requires AEGIS=1)
+endif
+CFLAGS += -DAGENT_TEST -DLAB5_TEST
+endif
 SCENARIO ?= 0
 ifeq ($(PLATFORM),vf2)
 CFLAGS += -DVISIONFIVE2
@@ -69,6 +83,9 @@ endif
 ifeq ($(TESTING),1)
 UserSourceFile += tests/user_context.S
 endif
+ifeq ($(AGENT_TEST),1)
+UserSourceFile = tests/agent_user.c
+endif
 
 # 生成目标文件（.o）路径列表
 KernelOBJ = $(patsubst $(KernelPath)/%.S, $(TARGET)/kernel/%.o, $(filter %.S, $(KernelSourceFile)))
@@ -79,6 +96,9 @@ UserOBJ = $(TARGET)/user/lab5_user.o
 endif
 ifeq ($(TESTING),1)
 UserOBJ += $(TARGET)/user/user_context.o
+endif
+ifeq ($(AGENT_TEST),1)
+UserOBJ = $(TARGET)/user/agent_user.o
 endif
 
 # QEMU模拟器配置
@@ -136,6 +156,7 @@ $(TARGET):
 	@mkdir -p $(TARGET)/kernel/trap
 	@mkdir -p $(TARGET)/kernel/proc
 	@mkdir -p $(TARGET)/kernel/syscall
+	@mkdir -p $(TARGET)/kernel/agent
 	@mkdir -p $(TARGET)/user
 
 # 编译规则：将汇编文件(.S)编译为目标文件(.o)
@@ -171,6 +192,9 @@ $(TARGET)/kernel/proc/proc.o: $(InitcodeHeader)
 $(TARGET)/user/lab5_user.o: tests/lab5_user.c | $(TARGET)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(TARGET)/user/agent_user.o: tests/agent_user.c | $(TARGET)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
 $(KERNEL_LD): kernel.ld $(TARGET)/build-config | $(TARGET)
 	$(CC) -E -P -x c $(if $(filter vf2,$(PLATFORM)),-DVISIONFIVE2) $< -o $@
 
@@ -199,7 +223,10 @@ test-lab4:
 test-lab3:
 	python3 tests/test_lab4.py --lab3
 
-.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5
+test-agent:
+	python3 tests/test_agent.py
+
+.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5 test-agent
 
 # 配置变化也必须重编译，避免测试宏或用户入口混入另一种镜像。
 $(TARGET)/build-config: FORCE | $(TARGET)

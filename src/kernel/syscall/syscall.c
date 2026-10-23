@@ -1,4 +1,5 @@
 #include "mod.h"
+#include "../agent/mod.h"
 
 static uint64 (*const services[])(void) = {
     [SYS_helloworld] = sys_helloworld,
@@ -16,8 +17,21 @@ void syscall(void)
     proc_t *p = myproc();
     assert(p && p->tf, "syscall: no trapframe");
     uint64 number = p->tf->a7;
+#if AEGIS
+    if (number < sizeof(services) / sizeof(services[0]) && !agent_allowed(p, number))
+    {
+        p->tf->a0 = number == SYS_mmap ? 0 : (uint64)-1;
+        agent_record(p, AGENT_CAP_DENY, number, (uint64)-1);
+        return;
+    }
+#endif
     p->tf->a0 = number < sizeof(services) / sizeof(services[0]) && services[number]
                 ? services[number]() : (uint64)-1;
+#if AEGIS
+    // 记录成功/失败，不将brk/mmap返回的用户地址写入审计。
+    bool failed = number == SYS_mmap ? p->tf->a0 == 0 : p->tf->a0 == (uint64)-1;
+    agent_record(p, AGENT_SYSCALL, number, failed ? (uint64)-1 : 0);
+#endif
 }
 
 uint64 arg_raw(int index)

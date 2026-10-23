@@ -1,5 +1,6 @@
 #include "mod.h"
 #include "../syscall/mod.h"
+#include "../agent/mod.h"
 
 extern char trampoline[], user_vector[], user_return[], kernel_vector[];
 #ifdef LAB4_TEST
@@ -51,6 +52,9 @@ void trap_user_handler(void)
         if (pages < 0)
         {
             printf("lab-5 stack growth failed\n");
+#if AEGIS
+            agent_record(p, AGENT_FAULT, cause, (uint64)-1);
+#endif
             proc_return();
         }
         p->ustack_npage = pages;
@@ -58,6 +62,9 @@ void trap_user_handler(void)
     }
     else
     {
+#if AEGIS
+        agent_record(p, AGENT_FAULT, cause, (uint64)-1);
+#endif
         printf("lab-4 user fault: cause=%p epc=%p stval=%p\n",
                cause, p->tf->user_to_kern_epc, r_stval());
         proc_return();

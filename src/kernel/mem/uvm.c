@@ -1,4 +1,5 @@
 #include "mod.h"
+#include "../agent/mod.h"
 
 static uint64 round_up(uint64 value) { return (value + PGSIZE - 1) & ~(PGSIZE - 1ul); }
 static uint64 round_down(uint64 value) { return value & ~(PGSIZE - 1ul); }
@@ -109,9 +110,19 @@ static int allocate_range(pgtbl_t root, uint64 begin, uint64 end, int perm)
         if (pte && (*pte & PTE_V))
             return -1;
     }
+#if AEGIS
+    uint64 charged = (end - begin) / PGSIZE;
+    if (agent_charge(root, charged))
+        return -1;
+#endif
     pgtbl_t stage = pmem_alloc(true);
     if (!stage)
+    {
+#if AEGIS
+        agent_uncharge(root, charged);
+#endif
         return -1;
+    }
     for (uint64 va = begin; va < end; va += PGSIZE)
     {
         uint64 page = (uint64)pmem_alloc(false);
@@ -120,6 +131,9 @@ static int allocate_range(pgtbl_t root, uint64 begin, uint64 end, int perm)
             if (page)
                 pmem_free(page, false);
             uvm_destroy_pgtbl(stage);
+#if AEGIS
+            agent_uncharge(root, charged);
+#endif
             return -1;
         }
     }
@@ -174,6 +188,9 @@ static void release_range(pgtbl_t root, uint64 begin, uint64 end)
         return;
     vm_unmappages(root, begin, end - begin, true);
     prune_empty(root, 2, begin, end - 1);
+#if AEGIS
+    agent_uncharge(root, (end - begin) / PGSIZE);
+#endif
 }
 
 uint64 uvm_heap_grow(pgtbl_t root, uint64 top, uint32 len)

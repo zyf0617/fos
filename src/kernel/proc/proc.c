@@ -1,6 +1,7 @@
 #include "mod.h"
 #include "../trap/mod.h"
 #include "initcode.h"
+#include "../agent/mod.h"
 
 extern char trampoline[];
 extern void swtch(context_t *old, context_t *new);
@@ -30,6 +31,9 @@ static void release_first(first_resources_t *r)
 {
     // 当前已返回内核页表；用户页和页表由统一销毁函数回收。
     uvm_destroy_pgtbl(r->proc.pgtbl);
+#if AEGIS
+    agent_detach(&r->proc);
+#endif
     if (r->proc.tf)
         pmem_free((uint64)r->proc.tf, true);
     while (r->proc.mmap)
@@ -102,6 +106,15 @@ void proc_make_first(void)
             intr_on();
         return;
     }
+#if AEGIS
+    if (agent_attach_boot(&first.proc))
+    {
+        release_first(&first);
+        if (was_enabled) intr_on();
+        printf("aegis boot policy rejected process\n");
+        return;
+    }
+#endif
     cpu->proc = &first.proc;
     printf("lab-4 entering user mode\n");
     swtch(&cpu->ctx, &first.proc.ctx);
@@ -114,6 +127,10 @@ void proc_make_first(void)
            "proc_make_first: leaked kernel resources");
     assert(mmap_available() == nodes_before, "proc_make_first: leaked mmap nodes");
     printf("lab-4 faulted process cleaned up\n");
+#if AEGIS
+    agent_boot_check();
+    agent_audit_dump();
+#endif
     if (was_enabled)
         intr_on();
 }

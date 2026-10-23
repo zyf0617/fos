@@ -68,11 +68,14 @@ typedef struct trapframe
 // 外部结构体
 typedef uint64 *pgtbl_t;
 typedef struct mmap_region mmap_region_t;
+struct agent_group;
 
 // 进程
 typedef struct proc
 {
     int pid; // 标识符
+    struct agent_group *agent; // NULL保持普通进程语义
+    uint64 agent_pages;        // 本成员已收费的用户数据页
 
     pgtbl_t pgtbl;       // 用户态页表
     uint64 heap_top;     // 用户堆顶(以字节为单位)

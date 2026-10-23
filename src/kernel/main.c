@@ -3,6 +3,7 @@
 #include "mem/mod.h"
 #include "trap/mod.h"
 #include "proc/mod.h"
+#include "agent/mod.h"
 //_entry在kernel.ld中定义 将后续hart中的启动地址定义为该地址
 extern void _entry_secondary(void);
 
@@ -20,6 +21,9 @@ void main(void)
         printf("cpu %d is booting with OpenSBI!\n", (int)hartid);
         pmem_init();
         mmap_init();
+#if AEGIS
+        agent_init();
+#endif
         kvm_init();
         trap_kernel_init();
         __sync_synchronize();
@@ -57,6 +61,9 @@ void main(void)
 #ifdef LAB5_TEST
         proc_self_test();
         lab5_self_test();
+#endif
+#ifdef AGENT_TEST
+        agent_self_test();
 #endif
 #ifdef LAB4_TEST
         lab4_memory_test();
