@@ -25,3 +25,7 @@ uint64 proc_wait(uint64 status);
 void proc_yield(void);
 void proc_exit(uint64 status) __attribute__((noreturn));
 #endif
+
+#if PROC_PREEMPT
+void proc_timer_tick(void);
+#endif

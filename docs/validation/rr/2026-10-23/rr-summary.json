@@ -1,0 +1,155 @@
+{
+  "scope": "QEMU boot-hart user-mode timer preemption; no kernel preemption/SMP/fairness benchmark",
+  "result": "PASS",
+  "source_sha256": "0d02e96e50f69ad11897539cd30a8f5e2b1b230a5c93df02b04c91ad4cc39a9a",
+  "negative_control": "serial execution confirmed",
+  "identical_user_image": true,
+  "results": [
+    {
+      "name": "rr-preempt0-aegis0-audit0-success1",
+      "preempt": false,
+      "aegis": 0,
+      "audit": 0,
+      "audit_success": 1,
+      "both_started_before_either_completed": false,
+      "process_samples": [],
+      "user_sha256": "aaf57e8ac3e9436bbaded875f3e03de0f4beab07e4ee43d843ff972da540dc3e",
+      "kernel_sha256": "e48dfb9a0b03bd7547beed2c423e685adaf55b4ac975424d164b75ca9bf5769d",
+      "log": "target/tests/lab5/rr-preempt0-aegis0-audit0-success1/rr-preempt0-aegis0-audit0-success1.log",
+      "archived_log": "rr-preempt0-aegis0-audit0-success1.log",
+      "log_sha256": "c5062fdb88b54252ec102a94426f38b4b16b77117d06636edd7b6caece1355fc"
+    },
+    {
+      "name": "rr-preempt1-aegis0-audit0-success1",
+      "preempt": true,
+      "aegis": 0,
+      "audit": 0,
+      "audit_success": 1,
+      "both_started_before_either_completed": true,
+      "process_samples": [
+        {
+          "pid": 1,
+          "dispatches": 6,
+          "ticks": 5,
+          "preemptions": 5
+        },
+        {
+          "pid": 2,
+          "dispatches": 6,
+          "ticks": 5,
+          "preemptions": 5
+        },
+        {
+          "pid": 0,
+          "dispatches": 2,
+          "ticks": 0,
+          "preemptions": 0
+        }
+      ],
+      "user_sha256": "aaf57e8ac3e9436bbaded875f3e03de0f4beab07e4ee43d843ff972da540dc3e",
+      "kernel_sha256": "4d12a38192cbab84813d08ff41cc10773e11f87cc6e15cf5719c6d3a2d735a8e",
+      "log": "target/tests/lab5/rr-preempt1-aegis0-audit0-success1/rr-preempt1-aegis0-audit0-success1.log",
+      "archived_log": "rr-preempt1-aegis0-audit0-success1.log",
+      "log_sha256": "7dbbd84a4a230d3aa7fdffc15d95233e2250569b66620a325ba59fef4420e7d2"
+    },
+    {
+      "name": "rr-preempt1-aegis1-audit1-success1",
+      "preempt": true,
+      "aegis": 1,
+      "audit": 1,
+      "audit_success": 1,
+      "both_started_before_either_completed": true,
+      "process_samples": [
+        {
+          "pid": 1,
+          "dispatches": 6,
+          "ticks": 5,
+          "preemptions": 5
+        },
+        {
+          "pid": 2,
+          "dispatches": 6,
+          "ticks": 5,
+          "preemptions": 5
+        },
+        {
+          "pid": 0,
+          "dispatches": 2,
+          "ticks": 0,
+          "preemptions": 0
+        }
+      ],
+      "user_sha256": "aaf57e8ac3e9436bbaded875f3e03de0f4beab07e4ee43d843ff972da540dc3e",
+      "kernel_sha256": "0b1b9584d49291944293323aaa682252b5a16d397e945a7ac9059faba66d4c0c",
+      "log": "target/tests/lab5/rr-preempt1-aegis1-audit1-success1/rr-preempt1-aegis1-audit1-success1.log",
+      "archived_log": "rr-preempt1-aegis1-audit1-success1.log",
+      "log_sha256": "fb2ff784f0e36538745f2ae346dc06d4b5afe01fa5c548e68a4cebc3639a6a72"
+    },
+    {
+      "name": "rr-preempt1-aegis1-audit1-success0",
+      "preempt": true,
+      "aegis": 1,
+      "audit": 1,
+      "audit_success": 0,
+      "both_started_before_either_completed": true,
+      "process_samples": [
+        {
+          "pid": 1,
+          "dispatches": 6,
+          "ticks": 5,
+          "preemptions": 5
+        },
+        {
+          "pid": 2,
+          "dispatches": 6,
+          "ticks": 5,
+          "preemptions": 5
+        },
+        {
+          "pid": 0,
+          "dispatches": 2,
+          "ticks": 0,
+          "preemptions": 0
+        }
+      ],
+      "user_sha256": "aaf57e8ac3e9436bbaded875f3e03de0f4beab07e4ee43d843ff972da540dc3e",
+      "kernel_sha256": "c34897b610ce0ec1350e30ee3ae8c23ee5b79085a8f5b1fdb12c6bdd0b1c5b9f",
+      "log": "target/tests/lab5/rr-preempt1-aegis1-audit1-success0/rr-preempt1-aegis1-audit1-success0.log",
+      "archived_log": "rr-preempt1-aegis1-audit1-success0.log",
+      "log_sha256": "762141322978cb2ef08f71f8ce02425e1d51b70c241ddf1c13c67f988c5ac78a"
+    },
+    {
+      "name": "rr-preempt1-aegis1-audit0-success1",
+      "preempt": true,
+      "aegis": 1,
+      "audit": 0,
+      "audit_success": 1,
+      "both_started_before_either_completed": true,
+      "process_samples": [
+        {
+          "pid": 1,
+          "dispatches": 6,
+          "ticks": 5,
+          "preemptions": 5
+        },
+        {
+          "pid": 2,
+          "dispatches": 6,
+          "ticks": 5,
+          "preemptions": 5
+        },
+        {
+          "pid": 0,
+          "dispatches": 2,
+          "ticks": 0,
+          "preemptions": 0
+        }
+      ],
+      "user_sha256": "aaf57e8ac3e9436bbaded875f3e03de0f4beab07e4ee43d843ff972da540dc3e",
+      "kernel_sha256": "d44e422080ba5e51682dda1a47387520c7b0111d35d38a3a66b19b711e3bab84",
+      "log": "target/tests/lab5/rr-preempt1-aegis1-audit0-success1/rr-preempt1-aegis1-audit0-success1.log",
+      "archived_log": "rr-preempt1-aegis1-audit0-success1.log",
+      "log_sha256": "9cc457316161d787976afb81d332db2441d8edf003c53754050b82fd580d9466"
+    }
+  ]
+}

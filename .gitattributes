@@ -1,2 +1,5 @@
 # Preserve raw firmware serial bytes while accepting CRLF in evidence logs.
 docs/benchmarks/agent/**/*.log -text whitespace=cr-at-eol
+
+# Preserve raw RR acceptance firmware output.
+docs/validation/rr/**/*.log -text whitespace=cr-at-eol

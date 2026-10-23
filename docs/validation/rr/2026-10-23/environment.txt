@@ -1,0 +1,3 @@
+macOS; QEMU virt; -m 130M; -smp 2; default OpenSBI; no icount
+QEMU emulator version 10.2.2
+riscv64-elf-gcc (GCC) 16.2.0

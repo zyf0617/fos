@@ -44,6 +44,10 @@ void trap_user_handler(void)
     else if (cause == (SCAUSE_INTERRUPT | SCAUSE_S_TIMER))
     {
         timer_interrupt_handler();
+#if PROC_PREEMPT
+        // 用户整数现场和epc已保存；timer锁已释放，内核路径不抢占。
+        proc_timer_tick();
+#endif
 #ifdef LAB4_TEST
         if (timer_get_ticks() == 3)
             printf("lab-4 user timer interrupt test passed\n");

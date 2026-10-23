@@ -1,0 +1,6 @@
+riscv64-elf-gcc
+riscv64-elf-ld
+riscv64-elf-objcopy
+-Wall -Werror -O -fno-omit-frame-pointer -ggdb -gdwarf-2 -std=gnu17 -MMD -MP -march=rv64gc_zicsr_zifencei -mabi=lp64d -mcmodel=medany -ffreestanding -fno-common -nostdlib -mno-relax -I. -fno-stack-protector -DPROC_LIFECYCLE=1 -DPROC_PREEMPT=0 -DRR_TEST -DAEGIS=0 -DAEGIS_AUDIT=0 -DAEGIS_AUDIT_SUCCESS=1 -DLAB4_BOOT_USER=1 -DLAB4_SCENARIO=0 -Itarget/tests/lab5/rr-preempt0-aegis0-audit0-success1/user
+-z max-page-size=4096
+2

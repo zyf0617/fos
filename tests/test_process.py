@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""Real cooperative userspace fork/exit/wait; no timer preemption claim."""
+"""Real userspace fork/exit/wait in cooperative or timer-preempted configurations."""
 import json
+import argparse
 import subprocess
 import test_lab5 as lab5
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--preempt", action="store_true")
+    args = parser.parse_args()
+    preempt = int(args.preempt)
     logs = []
     for aegis, audit, success in [(0, 0, 1), (1, 1, 1), (1, 1, 0), (1, 0, 1)]:
-        name = f'process-aegis{aegis}-audit{audit}-success{success}'
-        target = lab5.build(name, PROC_LIFECYCLE=1, PROC_TEST=1,
+        name = f'process-aegis{aegis}-audit{audit}-success{success}' + ('-rr' if preempt else '')
+        target = lab5.build(name, PROC_LIFECYCLE=1, PROC_TEST=1, PROC_PREEMPT=preempt,
                             AEGIS=aegis, AEGIS_AUDIT=audit, AEGIS_AUDIT_SUCCESS=success)
         # 自定义运行允许预期的子故障；检查其cause/stval，并继续等待父进程成功与清理。
         markers = [b'process fork isolation and blocking wait PASS', b'process wait retry PASS',
@@ -29,8 +34,8 @@ def main():
         if aegis and audit: assert b'kind=8 detail=0x0000000000000000' in log
         logs.append(str(target.relative_to(lab5.ROOT) / f'{name}.log'))
     for scenario in [31, 32, 33]:
-        name = f'process-policy-{scenario}'
-        target = lab5.build(name, PROC_LIFECYCLE=1, PROC_TEST=1, AEGIS=1, SCENARIO=scenario)
+        name = f'process-policy-{scenario}' + ('-rr' if preempt else '')
+        target = lab5.build(name, PROC_LIFECYCLE=1, PROC_TEST=1, PROC_PREEMPT=preempt, AEGIS=1, SCENARIO=scenario)
         lab5.run(name, target, [b'process fork policy rejection PASS',
                   b'aegis process lifecycle cleaned up', b'aegis group cleanup PASS', b'ticks = 10'])
         if scenario == 31:
@@ -53,14 +58,14 @@ def main():
         result = subprocess.run(['make', '--no-print-directory', 'build', *options], cwd=lab5.ROOT,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         assert result.returncode, options
-    report = {'scope': 'single boot-hart cooperative lifecycle; no timer preemption/board run',
+    report = {'scope': 'single boot-hart lifecycle; no board run', 'preempt': bool(preempt),
               'checks': ['independent user memory', 'blocking/retry wait', 'child fault',
                          'slot exhaustion', 'actual fork OOM rollback', 'PID/slot reuse',
                          'orphan continuation and automatic cleanup', 'four protection modes',
                          'capability/page/member fork rejection', 'same-directory feature toggle'],
               'result': 'PASS', 'logs': logs}
-    (lab5.OUT / 'process-summary.json').write_text(json.dumps(report, indent=2) + '\n')
-    print('Process lifecycle acceptance: PASS (cooperative; no timer preemption)', flush=True)
+    (lab5.OUT / ('process-rr-summary.json' if preempt else 'process-summary.json')).write_text(json.dumps(report, indent=2) + '\n')
+    print(f'Process lifecycle acceptance: PASS (preempt={preempt}; no board run)', flush=True)
 
 
 if __name__ == '__main__':

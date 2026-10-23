@@ -11,6 +11,9 @@ typedef struct process_slot {
     int pid;
     struct process_slot *parent;
     uint64 status;
+#if PROC_PREEMPT
+    uint64 dispatches, timer_ticks, preemptions;
+#endif
 } process_slot_t;
 static process_slot_t slots[PROC_SLOTS];
 static int next_pid;
@@ -83,6 +86,21 @@ void proc_yield(void)
     suspend(current(), RUNNABLE);
 }
 
+#if PROC_PREEMPT
+void proc_timer_tick(void)
+{
+    process_slot_t *s = current();
+    s->timer_ticks++;
+    for (int i = 0; i < PROC_SLOTS; i++)
+        if (slots[i].state == RUNNABLE)
+        {
+            s->preemptions++;
+            suspend(s, RUNNABLE);
+            return;
+        }
+}
+#endif
+
 uint64 proc_wait(uint64 status)
 {
     process_slot_t *parent = current();
@@ -142,6 +160,9 @@ void proc_lifecycle_run(proc_t *initial)
             active = true;
             if (s->state != RUNNABLE) continue;
             ran = true;
+#if PROC_PREEMPT
+            s->dispatches++;
+#endif
             s->state = RUNNING;
             mycpu()->proc = &s->proc;
             swtch(&mycpu()->ctx, &s->proc.ctx);
@@ -149,6 +170,10 @@ void proc_lifecycle_run(proc_t *initial)
             mycpu()->proc = NULL;
             if (s->state != ZOMBIE) continue;
             // 现已切回CPU启动栈；不能在退出者自己的栈上销毁资源。
+#if PROC_PREEMPT
+            printf("aegis rr pid=%d dispatches=%d ticks=%d preemptions=%d\n",
+                   s->pid, (int)s->dispatches, (int)s->timer_ticks, (int)s->preemptions);
+#endif
             proc_release_resources(&s->proc);
             if (s->parent && s->parent->state == WAITING) s->parent->state = RUNNABLE;
             for (int j = 0; j < PROC_SLOTS; j++)

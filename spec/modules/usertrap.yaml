@@ -58,3 +58,6 @@ lab5_delta:
 lifecycle_delta:
 - PROC_LIFECYCLE=1时不可恢复故障经proc_return以状态-1进入proc_exit，仅结束当前任务；返回用户态清零FS/VS，不支持未保存的浮点/向量现场。
 - PROC_TEST镜像的调用200仅用于分配故障注入；默认及非测试生命周期镜像不存在该入口。
+
+preempt_delta:
+- PROC_PREEMPT=1要求PROC_LIFECYCLE=1；用户timer分支在timer_interrupt_handler释放锁后调用proc_timer_tick，suspend前完整整数现场和epc已保存在当前任务trapframe；内核timer不触发调度。

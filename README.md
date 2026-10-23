@@ -14,13 +14,13 @@
 - 实际启动核 `boot_hartid` 创建唯一用户进程，辅助核留在内核；UART 接收和全局 ticks 归属该启动核。RX 中断为 IER bit0，TX bit1 不开启。
 - 可选 `AEGIS=1`：Agent Group 保护原型，包含共享用户页预算、成员数上限、syscall允许集合与64事件审计环；默认关闭，不改变课程ABI。当前没有组级调度、用户态管理器或真实LLM运行能力。
 
-默认课程路径维持单用户执行；可选`PROC_LIFECYCLE=1`支持单启动hart上的协作式fork/exit/wait/yield。timer抢占、exec、文件系统及浮点上下文切换尚未实现。
+默认课程路径维持单用户执行；可选`PROC_LIFECYCLE=1`支持单启动hart上的协作式fork/exit/wait/yield。另设`PROC_PREEMPT=1`启用用户态时钟抢占RR；exec、文件系统及浮点上下文切换尚未实现。
 
 汇报与设计材料：[功能实现说明](docs/功能实现说明.md)（实现路径、边界、演示及后续依赖）、[竞赛参考与差异化路线](docs/竞赛参考与差异化路线.md)（2025获奖作品及借鉴来源）、[Agent验收记录](docs/AGENT_VALIDATION.md)。新增功能需同步维护实现说明。
 
 研究与选型：[近期研究与成熟技术](docs/研究与技术选型.md)，含2025–2026论文、Linux/FreeBSD/运行时机制、阅读深度、采用顺序及实现映射。已应用分类分配失败事件、成功事件过滤及资源复制阶段的组继承。
 
-后续路线：[阶段开发计划](docs/后续开发计划.md)。资源复制与可选协作式生命周期已完成；`make test-process`运行真实fork/exit/wait/yield/getpid、父子内存隔离、失败回收及孤儿测试。默认关闭扩展，启用方式为`PROC_LIFECYCLE=1`，[生命周期契约与验收](docs/PROCESS_VALIDATION.md)说明ABI、边界与证据。下一阶段做timer抢占RR，再做组级调度；目前没有抢占公平性结论。
+后续路线：[阶段开发计划](docs/后续开发计划.md)。资源复制与可选协作式生命周期已完成；`make test-process`运行真实fork/exit/wait/yield/getpid、父子内存隔离、失败回收及孤儿测试。默认关闭扩展，启用方式为`PROC_LIFECYCLE=1`，[生命周期契约与验收](docs/PROCESS_VALIDATION.md)说明ABI、边界与证据。`make test-rr`已验证两个不主动yield任务的抢占运行，保留同镜像串行负对照，见[RR验收](docs/RR_VALIDATION.md)。下一阶段研究组级调度；当前没有组公平性或真实Agent性能结论。
 
 ## 构建与运行
 

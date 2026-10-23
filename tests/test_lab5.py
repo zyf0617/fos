@@ -2,6 +2,7 @@
 """Lab 5 builds, resource/permission probes, real user traps, and image checks."""
 import argparse
 import os
+import re
 from pathlib import Path
 import selectors
 import shutil
@@ -28,7 +29,7 @@ def build(name, **options):
     return target
 
 
-def run(name, target, markers, fault=None, expected_user_fault=None):
+def run(name, target, markers, fault=None, expected_user_fault=None, continued_after=None):
     command = [os.environ.get('QEMU', 'qemu-system-riscv64'), '-machine', 'virt',
                '-bios', os.environ.get('OPENSBI', 'default'), '-kernel',
                str(target / 'kernel/kernel-qemu.elf'), '-m', '130M', '-smp', '2', '-nographic']
@@ -52,7 +53,9 @@ def run(name, target, markers, fault=None, expected_user_fault=None):
                 process.stdin.write(b'lab5-uart\r')
                 process.stdin.flush()
                 injected = True
-            if all(marker in output for marker in markers) and b'lab5-uart\r\n' in output:
+            continued = continued_after is None or (continued_after in output and
+                re.search(rb'ticks = [0-9]+', output[output.index(continued_after) + len(continued_after):]))
+            if all(marker in output for marker in markers) and b'lab5-uart\r\n' in output and continued:
                 break
         else:
             raise RuntimeError(f'{name}: missing {[m for m in markers if m not in output]}')

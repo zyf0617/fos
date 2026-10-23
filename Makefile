@@ -14,6 +14,8 @@ include common.mk
 
 PROC_LIFECYCLE ?= 0
 PROC_TEST ?= 0
+PROC_PREEMPT ?= 0
+RR_TEST ?= 0
 ifneq ($(PROC_LIFECYCLE),0)
 ifneq ($(PROC_LIFECYCLE),1)
 $(error PROC_LIFECYCLE must be 0 or 1)
@@ -29,6 +31,27 @@ endif
 CFLAGS += -DPROC_TEST -DLAB5_TEST
 endif
 CFLAGS += -DPROC_LIFECYCLE=$(PROC_LIFECYCLE)
+ifneq ($(PROC_PREEMPT),0)
+ifneq ($(PROC_PREEMPT),1)
+$(error PROC_PREEMPT must be 0 or 1)
+endif
+ifneq ($(PROC_LIFECYCLE),1)
+$(error PROC_PREEMPT requires PROC_LIFECYCLE=1)
+endif
+endif
+CFLAGS += -DPROC_PREEMPT=$(PROC_PREEMPT)
+ifneq ($(RR_TEST),0)
+ifneq ($(RR_TEST),1)
+$(error RR_TEST must be 0 or 1)
+endif
+ifneq ($(PROC_LIFECYCLE),1)
+$(error RR_TEST requires PROC_LIFECYCLE=1)
+endif
+ifneq ($(PROC_TEST),0)
+$(error RR_TEST cannot be combined with PROC_TEST)
+endif
+CFLAGS += -DRR_TEST
+endif
 BOOT_USER ?= 1
 AEGIS ?= 0
 AEGIS_AUDIT ?= $(AEGIS)
@@ -150,6 +173,9 @@ endif
 ifeq ($(PROC_TEST),1)
 UserSourceFile = tests/process_user.c
 endif
+ifeq ($(RR_TEST),1)
+UserSourceFile = tests/rr_user.c tests/rr_context.S
+endif
 
 # 生成目标文件（.o）路径列表
 KernelOBJ = $(patsubst $(KernelPath)/%.S, $(TARGET)/kernel/%.o, $(filter %.S, $(KernelSourceFile)))
@@ -170,6 +196,9 @@ endif
 
 ifeq ($(PROC_TEST),1)
 UserOBJ = $(TARGET)/user/process_user.o
+endif
+ifeq ($(RR_TEST),1)
+UserOBJ = $(TARGET)/user/rr_user.o $(TARGET)/user/rr_context.o
 endif
 
 # QEMU模拟器配置
@@ -266,6 +295,12 @@ $(TARGET)/user/lab5_user.o: tests/lab5_user.c | $(TARGET)
 $(TARGET)/user/agent_user.o: tests/agent_user.c | $(TARGET)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(TARGET)/user/rr_user.o: tests/rr_user.c | $(TARGET)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(TARGET)/user/rr_context.o: tests/rr_context.S | $(TARGET)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
 $(TARGET)/user/process_user.o: tests/process_user.c | $(TARGET)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -303,13 +338,16 @@ test-lab3:
 test-agent:
 	python3 tests/test_agent.py
 
+test-rr:
+	python3 tests/test_rr.py
+
 test-process:
 	python3 tests/test_process.py
 
 bench-agent:
 	python3 tests/bench_agent.py
 
-.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5 test-agent test-process bench-agent
+.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5 test-agent test-process test-rr bench-agent
 
 # 配置变化也必须重编译，避免测试宏或用户入口混入另一种镜像。
 $(TARGET)/build-config: FORCE | $(TARGET)

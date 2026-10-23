@@ -53,4 +53,8 @@
 make build PLATFORM=vf2 PROC_LIFECYCLE=1 AEGIS=1 TARGET=target/tests/process-vf2
 ```
 
-VF2实板未运行；macOS不运行Linux宿主MMIO探针。既有微基准保留原始源码指纹，本次不重用其数据推导生命周期机制的开销。下一阶段先加入timer抢占RR及不主动yield任务的前进测试，再研究组级权重。
+VF2实板未运行；macOS不运行Linux宿主MMIO探针。既有微基准保留原始源码指纹，本次不重用其数据推导生命周期机制的开销。后续用户态timer抢占RR及不主动yield任务的验收见下节；组级权重仍待实验。
+
+## 后续：用户态抢占RR
+
+默认协作模式保持不变；`PROC_PREEMPT=1`另启用户timer抢占，要求`PROC_LIFECYCLE=1`。`python3 tests/test_process.py --preempt`已通过本文件的完整生命周期及策略拒绝回归。CPU密集任务、负对照和寄存器验收见[RR_VALIDATION.md](RR_VALIDATION.md)。内核仍不抢占，不宣称SMP或组公平性。
