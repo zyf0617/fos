@@ -44,6 +44,7 @@ rules:
 - 映射修改失败保留操作前映射及元数据并回收临时资源；用户copy失败允许目标已有前缀。
 - AEGIS=1可选接入agent模块的组归属、用户页预算、syscall允许集合及审计；默认AEGIS=0保留课程执行路径。
 extensions:
+  AGENT_SCHED: 默认0；1要求AEGIS及抢占生命周期，启用首进程组管理与组间加权、组内轮转
   PROC_LIFECYCLE: 默认0；1启用lifecycle.yaml的fork/exit/wait/yield/getpid；不代表课程Lab6完成
   PROC_PREEMPT: 默认0；1要求生命周期扩展，用户timer返回前按槽循环RR抢占，内核仍不可抢占
 non_goals:

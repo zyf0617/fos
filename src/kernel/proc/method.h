@@ -29,3 +29,9 @@ void proc_exit(uint64 status) __attribute__((noreturn));
 #if PROC_PREEMPT
 void proc_timer_tick(void);
 #endif
+
+#if AGENT_SCHED
+struct agent_group;
+int proc_clone_resources_to_group(proc_t *dst, const proc_t *src, int pid, struct agent_group *group);
+uint64 proc_agentctl(uint64 command, uint64 value, uint64 argument);
+#endif

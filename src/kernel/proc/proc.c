@@ -69,7 +69,7 @@ static uint64 user_pages(pgtbl_t root, int level)
 }
 #endif
 
-int proc_clone_resources(proc_t *dst, const proc_t *src, int pid)
+static int clone_resources(proc_t *dst, const proc_t *src, int pid, agent_group_t *group)
 {
     assert(dst && src && dst != src && src->pgtbl && src->tf,
            "proc_clone: invalid owner");
@@ -78,8 +78,11 @@ int proc_clone_resources(proc_t *dst, const proc_t *src, int pid)
     dst->pid = pid;
 #if AEGIS
     // 源由调用者稳定持有；先在同一组锁内预留成员和整批数据页。
-    if (src->agent && agent_attach(dst, src->agent, user_pages(src->pgtbl, 2)))
+    if (group && agent_attach(dst, group, user_pages(src->pgtbl, 2)))
         goto failed;
+#endif
+#if !AEGIS
+    (void)group;
 #endif
     dst->tf = pmem_alloc(true);
     if (!dst->tf) goto failed;
@@ -112,6 +115,19 @@ failed:
     proc_release_resources(dst);
     return -1;
 }
+
+int proc_clone_resources(proc_t *dst, const proc_t *src, int pid)
+{
+    assert(src != NULL, "proc_clone: missing source");
+    return clone_resources(dst, src, pid, src->agent);
+}
+#if AGENT_SCHED
+int proc_clone_resources_to_group(proc_t *dst, const proc_t *src, int pid, agent_group_t *group)
+{
+    assert(group != NULL, "proc_clone: missing destination group");
+    return clone_resources(dst, src, pid, group);
+}
+#endif
 
 static bool construct_first(first_resources_t *r)
 {

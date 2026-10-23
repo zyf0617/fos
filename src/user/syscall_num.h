@@ -13,7 +13,12 @@
 #define SYS_wait 10
 #define SYS_yield 11
 #define SYS_getpid 12
+#if AGENT_SCHED
+#define SYS_agentctl 13
+#define SYS_MAX_NUM 13
+#else
 #define SYS_MAX_NUM 12
+#endif
 #else
 #define SYS_MAX_NUM 7
 #endif

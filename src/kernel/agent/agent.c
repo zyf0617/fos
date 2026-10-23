@@ -3,6 +3,11 @@
 #if AEGIS
 
 static agent_group_t boot_group;
+#if AGENT_SCHED
+static agent_group_t managed[AGENT_GROUP_CAPACITY - 1];
+static bool registered[AGENT_GROUP_CAPACITY - 1];
+static uint64 next_group_id;
+#endif
 #if AEGIS_AUDIT
 static spinlock_t audit_lock;
 static agent_event_t events[AGENT_AUDIT_CAPACITY];
@@ -22,10 +27,18 @@ void agent_group_init(agent_group_t *g, uint64 id, uint64 pages,
     g->page_limit = pages;
     g->process_limit = processes;
     g->syscall_mask = syscall_mask;
+#if AGENT_SCHED
+    g->weight = 1;
+    g->member_cursor = PROC_SLOTS - 1;
+#endif
 }
 
 void agent_init(void)
 {
+#if AGENT_SCHED
+    memset(registered, 0, sizeof(registered));
+    next_group_id = 2;
+#endif
 #if AEGIS_AUDIT
     spinlock_init(&audit_lock, "agent.audit");
     sequence = 0;
@@ -130,6 +143,14 @@ int agent_attach_boot(proc_t *p)
 void agent_boot_check(void)
 {
     assert(!boot_group.pages && !boot_group.processes, "agent: boot group leaked");
+#if AGENT_SCHED
+    for (int i = 0; i < AGENT_GROUP_CAPACITY - 1; i++)
+    {
+        assert(!registered[i] || (!managed[i].pages && !managed[i].processes),
+               "agent: managed group leaked");
+        registered[i] = false;
+    }
+#endif
     printf("aegis group cleanup PASS\n");
 }
 
@@ -217,7 +238,7 @@ bool agent_allowed(proc_t *p, uint64 number)
         return true;
     agent_group_t *g = p->agent;
     spinlock_acquire(&g->lock);
-    bool allowed = number < (PROC_LIFECYCLE ? 13 : 8) && (g->syscall_mask & (1ul << number));
+    bool allowed = number <= SYS_MAX_NUM && (g->syscall_mask & (1ul << number));
     if (!allowed) g->capability_denied++;
     spinlock_release(&g->lock);
     return allowed;
@@ -261,4 +282,87 @@ void agent_audit_dump(void)
         cursor = event.sequence;
     }
 }
+
+#if AGENT_SCHED
+static void managed_owner(void)
+{
+    assert((uint64)mycpuid() == boot_hartid && !intr_get() && !mycpu()->noff,
+           "agent management: invalid owner");
+}
+
+uint64 agent_managed_create(const agent_policy_t *policy, uint64 allowed_mask)
+{
+    managed_owner();
+    if (!policy || !policy->page_limit || policy->page_limit > 64 ||
+        !policy->process_limit || policy->process_limit > PROC_SLOTS ||
+        !policy->weight || policy->weight > 16 ||
+        (policy->syscall_mask & ~AGENT_SYSCALL_MASK) ||
+        (policy->syscall_mask & ~allowed_mask) || next_group_id > 0x7ffffffffffffffful)
+        return (uint64)-1;
+    for (int i = 0; i < AGENT_GROUP_CAPACITY - 1; i++)
+        if (!registered[i])
+        {
+            agent_group_init(&managed[i], next_group_id++, policy->page_limit,
+                             policy->process_limit, policy->syscall_mask);
+            managed[i].weight = policy->weight;
+            registered[i] = true;
+            return managed[i].id;
+        }
+    return (uint64)-1;
+}
+
+agent_group_t *agent_managed_find(uint64 id)
+{
+    managed_owner();
+    if (id == boot_group.id) return &boot_group;
+    for (int i = 0; i < AGENT_GROUP_CAPACITY - 1; i++)
+        if (registered[i] && managed[i].id == id) return &managed[i];
+    return NULL;
+}
+
+int agent_managed_remove(uint64 id)
+{
+    managed_owner();
+    for (int i = 0; i < AGENT_GROUP_CAPACITY - 1; i++)
+        if (registered[i] && managed[i].id == id)
+        {
+            agent_group_t *g = &managed[i];
+            spinlock_acquire(&g->lock);
+            bool busy = g->processes || g->pages;
+            spinlock_release(&g->lock);
+            if (busy) return -1;
+            registered[i] = false;
+            return 0;
+        }
+    return -1;
+}
+
+int agent_set_weight(agent_group_t *g, uint64 weight)
+{
+    managed_owner();
+    if (!g || !weight || weight > 16) return -1;
+    spinlock_acquire(&g->lock);
+    g->weight = weight;
+    spinlock_release(&g->lock);
+    return 0;
+}
+
+void agent_get_info(agent_group_t *g, agent_info_t *out)
+{
+    spinlock_acquire(&g->lock);
+    *out = (agent_info_t){g->id, g->page_limit, g->pages, g->process_limit,
+                         g->processes, g->syscall_mask, g->weight};
+    spinlock_release(&g->lock);
+}
+
+int agent_managed_list(agent_group_t **out)
+{
+    managed_owner();
+    int n = 0;
+    out[n++] = &boot_group;
+    for (int i = 0; i < AGENT_GROUP_CAPACITY - 1; i++)
+        if (registered[i]) out[n++] = &managed[i];
+    return n;
+}
+#endif
 #endif

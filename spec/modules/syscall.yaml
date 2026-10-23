@@ -8,6 +8,7 @@ owns:
 state:
   syscall_table: 固定有界分发表；编号与src/user/syscall_num.h一致，0至7依次为helloworld、copyin、copyout、copyinstr、brk、mmap、munmap、printf。
 rules:
+- AGENT_SCHED=1在生命周期调用后注册13号agentctl；首进程管理身份与普通允许集合两层校验，命令与参数布局见lifecycle.yaml。
 - PROC_LIFECYCLE=1另注册8 fork、9 exit(status64)、10 wait(status64指针/0忽略)、11 yield、12 getpid，契约见lifecycle.yaml；默认0时这些编号仍未知返回-1。
 - 分发和参数提取要求当前进程及trapframe有效；丢失上下文、无效内核输出指针和参数索引属于内核错误。
 - a7为调用号，a0至a5为六个原始参数，a0接收64位返回结果；只有usertrap推进epc，syscall不重复推进。

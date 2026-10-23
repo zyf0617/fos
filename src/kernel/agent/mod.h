@@ -2,7 +2,9 @@
 #include "../proc/mod.h"
 
 #define AGENT_AUDIT_CAPACITY 64
-#if PROC_LIFECYCLE
+#if AGENT_SCHED
+#define AGENT_SYSCALL_MASK 16383ul
+#elif PROC_LIFECYCLE
 #define AGENT_SYSCALL_MASK 8191ul
 #else
 #define AGENT_SYSCALL_MASK 255ul
@@ -15,6 +17,13 @@ typedef struct agent_group {
     spinlock_t lock;
     uint64 id, page_limit, pages, process_limit, processes, syscall_mask;
     uint64 peak_pages, quota_denied, capability_denied, allocation_failed;
+#if AGENT_SCHED
+    uint64 weight;
+    // 仅启动hart调度器持有；资源计数仍由上面的组锁保护。
+    uint64 virtual_time, remainder, divisor;
+    int member_cursor;
+    bool ready;
+#endif
 } agent_group_t;
 
 typedef struct agent_stats {
@@ -50,4 +59,16 @@ void agent_audit_snapshot(agent_audit_stats_t *out);
 #ifdef AGENT_TEST
 void agent_self_test(void);
 void agent_test_worker(void);
+#endif
+
+#if AGENT_SCHED
+#include "../../user/agent_abi.h"
+#define AGENT_GROUP_CAPACITY 4
+// 管理表只由启动hart在关中断、无锁的内核上下文操作。
+uint64 agent_managed_create(const agent_policy_t *policy, uint64 allowed_mask);
+agent_group_t *agent_managed_find(uint64 id);
+int agent_managed_remove(uint64 id);
+int agent_set_weight(agent_group_t *g, uint64 weight);
+void agent_get_info(agent_group_t *g, agent_info_t *out);
+int agent_managed_list(agent_group_t **out);
 #endif

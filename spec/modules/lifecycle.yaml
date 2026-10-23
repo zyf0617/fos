@@ -3,6 +3,7 @@ configuration:
   PROC_LIFECYCLE: 默认0；1启用本项目的单启动hart协作式生命周期；非课程Lab6规格
   PROC_PREEMPT: 默认0；1要求PROC_LIFECYCLE=1，仅用户timer返回前按就绪槽进行RR抢占
   RR_TEST: 默认0；1要求PROC_LIFECYCLE=1，专用无主动让出CPU的镜像，与PROC_TEST/课程测试/微基准互斥
+  AGENT_SCHED: 默认0；1启用可信组管理与组间加权选择，要求AEGIS=1及用户timer抢占
   PROC_TEST: 默认0；1要求PROC_LIFECYCLE=1，替换用户镜像并提供仅测试故障注入调用200
 owns:
 - src/kernel/proc/lifecycle.c
@@ -22,7 +23,7 @@ rules:
 - 只保存整数现场，进入用户态显式将sstatus.FS/VS清零；浮点/向量指令不受支持，触发用户故障，不静默共享扩展寄存器。
 - 僵尸保留退出记录直到父wait，动态地址空间、trapframe、组预算及成员名额在调度栈上立即回收；槽位仍占用直到wait或自动回收。
 - 父退出时将所有子进程parent清空，已退出子进程的槽位自动归还，活跃孤儿继续运行并退出时自动归还；没有用户init收养或POSIX信号语义。
-- 所有新增服务仍经过统一syscall权限分派；组策略不由用户修改。扩展构建支持低13位mask；默认课程构建仍为低8位。
+- 所有新增服务仍经过统一syscall权限分派；生命周期支持13位mask、组管理支持14位。AGENT_SCHED时仅初始槽有manager身份，任何复制均不继承；普通子任务只查本组。
 functions:
   proc_lifecycle_run:
     pre: boot hart、关中断、无锁且cpu.proc为空；initial为完整首进程，组归属已准备
@@ -49,3 +50,11 @@ acceptance:
 - 覆盖坏指针/只读页/无U位/跨页状态写失败重试、子故障、未支持FP指令、4槽耗尽、单调PID复用、父退出时僵尸及活跃孤儿、孤儿继续fork/wait。
 - 实际fork逐物理分配点失败不泄漏，至少一次成功；真实ABI下权限、页预算、成员上限均拒绝fork；退出后所有动态资源与组用量恢复，UART与ticks继续。
 - 同目录关闭扩展后无proc_fork符号且原课程用户程序通过；非法配置拒绝；默认Lab3/4/5与Agent验收保持通过；VF2仅构建验收。
+
+group_control:
+- 13号agentctl的完整64位命令为0创建(policy指针)、1向指定组派生、2查询组(value为info指针、argument为组号，0指本组，非管理员只查本组)、3调整组权重(group,weight)、4删除空组(group)；未知命令或失败返回-1。
+- policy为4个64位字段page_limit/process_limit/weight/syscall_mask；info为7个64位字段id/page_limit/pages/process_limit/processes/syscall_mask/weight；用户指针只经过uvm_copyin/out。
+- 指定组派生复用proc_clone_resources_to_group，先向目标组预留全部页和一个成员，成功设置内核上下文后发布，失败目标全零且源不变；新进程无管理权。
+- 组间选最小virtual_time，组内轮转成员；收费区间为swtch前后r_time差，按开始时权重归一，保留除法余数，最小非零收费；等待时间不收费。当前组改权重下一片生效。
+- 先更新既有就绪组的进度，再将新建/唤醒组的virtual_time提升到当前进度；无其他旧就绪组时以刚结束区间的进度为准，避免单组长时间运行后给新组历史信用。
+- 未启用组调度时按原进程槽循环RR，不增加组管理权限；内核处理仍不可抢占。

@@ -82,3 +82,6 @@ functions:
     - 不再恢复故障用户执行，默认路径由恢复后的proc_make_first清理；生命周期扩展以状态-1进入proc_exit并在调度栈上回收；本入口不返回。
 lab5_delta:
 - proc新增mmap头指针；成功构造后发布；故障清理递归回收所有用户页和mmap节点，再单独归还trapframe；启动预分配内核栈保留。
+
+group_clone_delta:
+- AGENT_SCHED时proc_clone_resources_to_group由可信管理入口指定目标组，源稳定持有，向目标预留实际叶页数；复用同一复制/回滚实现，普通clone仍继承源组。

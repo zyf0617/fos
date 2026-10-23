@@ -20,7 +20,7 @@
 
 研究与选型：[近期研究与成熟技术](docs/研究与技术选型.md)，含2025–2026论文、Linux/FreeBSD/运行时机制、阅读深度、采用顺序及实现映射。已应用分类分配失败事件、成功事件过滤及资源复制阶段的组继承。
 
-后续路线：[阶段开发计划](docs/后续开发计划.md)。资源复制与可选协作式生命周期已完成；`make test-process`运行真实fork/exit/wait/yield/getpid、父子内存隔离、失败回收及孤儿测试。默认关闭扩展，启用方式为`PROC_LIFECYCLE=1`，[生命周期契约与验收](docs/PROCESS_VALIDATION.md)说明ABI、边界与证据。`make test-rr`已验证两个不主动yield任务的抢占运行，保留同镜像串行负对照，见[RR验收](docs/RR_VALIDATION.md)。下一阶段研究组级调度；当前没有组公平性或真实Agent性能结论。
+后续路线：[阶段开发计划](docs/后续开发计划.md)。资源复制与可选协作式生命周期已完成；`make test-process`运行真实fork/exit/wait/yield/getpid、父子内存隔离、失败回收及孤儿测试。默认关闭扩展，启用方式为`PROC_LIFECYCLE=1`，[生命周期契约与验收](docs/PROCESS_VALIDATION.md)说明ABI、边界与证据。`make test-rr`已验证两个不主动yield任务的抢占运行，保留同镜像串行负对照，见[RR验收](docs/RR_VALIDATION.md)。组管理、agentctl和组间加权调度已接入，可用`make build-aegis`构建或`make run-aegis`运行完整配置。`make test-groups`检查功能与错误处理；后续以实际功能开发为主。
 
 ## 构建与运行
 

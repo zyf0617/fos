@@ -9,6 +9,10 @@ static uint64 sys_yield(void) { proc_yield(); return 0; }
 static uint64 sys_getpid(void) { return myproc()->pid; }
 #endif
 
+#if AGENT_SCHED
+static uint64 sys_agentctl(void) { return proc_agentctl(arg_raw(0), arg_raw(1), arg_raw(2)); }
+#endif
+
 static uint64 (*const services[])(void) = {
     [SYS_helloworld] = sys_helloworld,
     [SYS_copyin] = sys_copyin,
@@ -24,6 +28,9 @@ static uint64 (*const services[])(void) = {
     [SYS_wait] = sys_wait,
     [SYS_yield] = sys_yield,
     [SYS_getpid] = sys_getpid,
+#if AGENT_SCHED
+    [SYS_agentctl] = sys_agentctl,
+#endif
 #endif
 };
 

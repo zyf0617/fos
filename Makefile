@@ -16,6 +16,8 @@ PROC_LIFECYCLE ?= 0
 PROC_TEST ?= 0
 PROC_PREEMPT ?= 0
 RR_TEST ?= 0
+AGENT_SCHED ?= 0
+GROUP_TEST ?= 0
 ifneq ($(PROC_LIFECYCLE),0)
 ifneq ($(PROC_LIFECYCLE),1)
 $(error PROC_LIFECYCLE must be 0 or 1)
@@ -87,6 +89,27 @@ $(error AEGIS_AUDIT_SUCCESS must be 0 or 1)
 endif
 endif
 CFLAGS += -DAEGIS=$(AEGIS) -DAEGIS_AUDIT=$(AEGIS_AUDIT) -DAEGIS_AUDIT_SUCCESS=$(AEGIS_AUDIT_SUCCESS)
+ifneq ($(AGENT_SCHED),0)
+ifneq ($(AGENT_SCHED),1)
+$(error AGENT_SCHED must be 0 or 1)
+endif
+ifneq ($(AEGIS):$(PROC_LIFECYCLE):$(PROC_PREEMPT),1:1:1)
+$(error AGENT_SCHED requires AEGIS=1 PROC_LIFECYCLE=1 PROC_PREEMPT=1)
+endif
+endif
+CFLAGS += -DAGENT_SCHED=$(AGENT_SCHED)
+ifneq ($(GROUP_TEST),0)
+ifneq ($(GROUP_TEST),1)
+$(error GROUP_TEST must be 0 or 1)
+endif
+ifneq ($(AGENT_SCHED),1)
+$(error GROUP_TEST requires AGENT_SCHED=1)
+endif
+ifneq ($(filter 1,$(PROC_TEST) $(RR_TEST) $(AGENT_TEST) $(AGENT_BENCH)),)
+$(error GROUP_TEST cannot be combined with other test images)
+endif
+CFLAGS += -DGROUP_TEST
+endif
 ifeq ($(AGENT_TEST),1)
 ifneq ($(AEGIS),1)
 $(error AGENT_TEST=1 requires AEGIS=1)
@@ -177,6 +200,10 @@ ifeq ($(RR_TEST),1)
 UserSourceFile = tests/rr_user.c tests/rr_context.S
 endif
 
+ifeq ($(GROUP_TEST),1)
+UserSourceFile = tests/group_user.c tests/rr_context.S
+endif
+
 # 生成目标文件（.o）路径列表
 KernelOBJ = $(patsubst $(KernelPath)/%.S, $(TARGET)/kernel/%.o, $(filter %.S, $(KernelSourceFile)))
 KernelOBJ += $(patsubst $(KernelPath)/%.c, $(TARGET)/kernel/%.o, $(filter %.c, $(KernelSourceFile)))
@@ -199,6 +226,10 @@ UserOBJ = $(TARGET)/user/process_user.o
 endif
 ifeq ($(RR_TEST),1)
 UserOBJ = $(TARGET)/user/rr_user.o $(TARGET)/user/rr_context.o
+endif
+
+ifeq ($(GROUP_TEST),1)
+UserOBJ = $(TARGET)/user/group_user.o $(TARGET)/user/rr_context.o
 endif
 
 # QEMU模拟器配置
@@ -295,6 +326,9 @@ $(TARGET)/user/lab5_user.o: tests/lab5_user.c | $(TARGET)
 $(TARGET)/user/agent_user.o: tests/agent_user.c | $(TARGET)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(TARGET)/user/group_user.o: tests/group_user.c | $(TARGET)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
 $(TARGET)/user/rr_user.o: tests/rr_user.c | $(TARGET)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -338,6 +372,15 @@ test-lab3:
 test-agent:
 	python3 tests/test_agent.py
 
+build-aegis:
+	$(MAKE) build AEGIS=1 PROC_LIFECYCLE=1 PROC_PREEMPT=1 AGENT_SCHED=1 TARGET=target/aegis/$(PLATFORM)
+
+run-aegis:
+	$(MAKE) run AEGIS=1 PROC_LIFECYCLE=1 PROC_PREEMPT=1 AGENT_SCHED=1 TARGET=target/aegis/$(PLATFORM)
+
+test-groups:
+	python3 tests/test_groups.py
+
 test-rr:
 	python3 tests/test_rr.py
 
@@ -347,7 +390,7 @@ test-process:
 bench-agent:
 	python3 tests/bench_agent.py
 
-.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5 test-agent test-process test-rr bench-agent
+.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5 test-agent test-process test-rr test-groups build-aegis run-aegis bench-agent
 
 # 配置变化也必须重编译，避免测试宏或用户入口混入另一种镜像。
 $(TARGET)/build-config: FORCE | $(TARGET)

@@ -1,15 +1,17 @@
 module: kernel/agent
 authority: ../../../../AegisOS_ARCHITECTURE.md
-stage: Lab5保护原型及可选协作式生命周期；不宣称抢占公平性、SMP或真实LLM运行能力
+stage: 课程保护、进程生命周期与组管理开发
 configuration:
   AEGIS: 默认0；1启用启动组、内存收费及系统调用权限/审计钩子
   AEGIS_AUDIT: 默认等于AEGIS；0关闭事件环但保留保护；1要求AEGIS=1
   AEGIS_AUDIT_SUCCESS: 默认1；0仅过滤成功syscall完成事件，生命周期/拒绝/故障/分配失败仍保留
+  AGENT_SCHED: 默认0；1要求AEGIS/PROC_LIFECYCLE/PROC_PREEMPT均为1，启用4组固定表、首进程管理接口及组间加权调度
+  GROUP_TEST: 默认0；1要求AGENT_SCHED=1，运行组管理功能检查，与其他专用镜像互斥
   AGENT_TEST: 默认0；1要求AEGIS=1，启用隔离测试镜像和故障注入
   AGENT_BENCH: 默认0；1编译相同用户微基准，禁止与其他测试镜像混用
 rules:
-- 普通未入组进程保持课程路径；课程syscall编号0至7不变，不增加用户管理ABI。
-- group由内核持有；初始化设置id、用户数据页限额、进程数限额及课程8位/生命周期扩展13位syscall允许集合；用户不能修改策略。
+- 普通未入组进程保持课程路径；课程syscall编号0至7不变，仅AGENT_SCHED扩展注册13号agentctl，契约见lifecycle.yaml。
+- group由内核持有；初始化设置id、用户数据页限额、进程数限额及课程8位/生命周期扩展13位/组管理扩展14位syscall允许集合；普通任务不能修改策略，仅初始管理员可通过受控接口创建组及调整权重。
 - attach在进程独占上下文检查成员数及初始页数，成功后发布归属；重复attach或超限失败且不改变状态。
 - 当前启动进程在构造完成后以代码页和初始栈页共2页入组；页表页与trapframe不计入用户数据页预算。
 - heap、stack及mmap分配先在组锁内预留整批页数；物理分配或建表失败归还预算；解除成功后归还对应预算。
@@ -40,7 +42,7 @@ functions:
     pre: 启动核单次执行，尚无并发事件
     post: 初始化审计锁、序号和固定启动组，测试策略与默认策略分别编译
   agent_group_init:
-    pre: 内核独占且尚无成员的存储；对象寿命覆盖所有成员；mask仅课程低8位或生命周期构建低13位
+    pre: 内核独占且尚无成员的存储；对象寿命覆盖所有成员；mask仅课程低8位、生命周期低13位或组管理低14位
     post: 计数清零并设置锁与策略；不分配物理内存
   agent_attach:
     pre: 进程归属由调用者独占，initial_pages准确表示该成员已有或本次构造预留的数据页
@@ -78,3 +80,9 @@ functions:
   agent_audit_dump:
     pre: 内核诊断上下文；不能作为无界并发生产时的可靠持久化导出
     post: 在审计锁外打印保留事件及丢失数；读取不清空环
+
+managed_groups:
+- 固定4组含启动组1，仅启动hart关中断且无锁时操作管理表；新组号单调正增长不复用，到有符号long上限拒绝。
+- 创建验证1至64页、1至PROC_SLOTS成员、1至16权重和允许集合；不得授予管理员当前没有的服务权限。
+- 空组方可删除，启动组不可删除；组对象寿命覆盖成员；所有任务结束后清理剩余空组表位置。
+- 调度字段virtual_time/remainder/divisor/member_cursor/ready只由启动hart调度器持有，资源计数和权重接口仍遵守组锁。
