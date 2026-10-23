@@ -159,7 +159,7 @@ def main():
     group = args.group
     name = f'lab5-{group}'
     target = build(name, LAB5_TEST=1, SCENARIO=GROUPS[group])
-    base = [b'lab-5 kernel suite PASS', b'lab-5 USER PASS',
+    base = [b'aegis process resource clone PASS', b'lab-5 kernel suite PASS', b'lab-5 USER PASS',
             b'lab-4 faulted process cleaned up', b'ticks = 10']
     if group == 'all':
         base += [b'kernel copy PASS', b'kernel heap-stack PASS', b'kernel mmap PASS',

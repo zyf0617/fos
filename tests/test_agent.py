@@ -11,6 +11,7 @@ def main():
         target = lab5.build(name, AEGIS=1, AEGIS_AUDIT=audit, AEGIS_AUDIT_SUCCESS=success,
                             AGENT_TEST=1, SCENARIO=30)
         markers = [
+        b'aegis process resource clone PASS',
         b'aegis kernel protection PASS', b'aegis capability deny PASS',
         b'aegis concurrent budget PASS',
         b'aegis quota reuse PASS', b'aegis USER PASS', b'lab-5 stack growth failed',
@@ -53,7 +54,8 @@ def main():
         assert result.returncode != 0, options
     report = {
         'scope': 'QEMU protection prototype; no real LLM, scheduler, or board run',
-        'checks': {'group_shared_budget_and_process_limit': 'PASS',
+        'checks': {'transactional_resource_clone_and_group_inheritance': 'PASS',
+                   'group_shared_budget_and_process_limit': 'PASS',
                    'dual_hart_quota_barrier_and_churn': 'PASS',
                    'stats_and_monotonic_policy_restriction': 'PASS',
                    'heap_mmap_stack_quota_and_oom_rollback': 'PASS',

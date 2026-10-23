@@ -2,6 +2,7 @@ module: kernel/process
 owns:
 - src/kernel/lib/cpu.c
 - src/kernel/proc/proc.c
+- src/kernel/proc/clone_test.c
 - src/kernel/proc/swtch.S
 - src/kernel/proc/type.h
 - src/kernel/proc/method.h
@@ -37,6 +38,22 @@ functions:
     post:
     - 成功返回独占的用户页表；零页和其他地址仍未映射，trapframe 与 trampoline 所有权不转移。
     - 分配或映射失败返回 NULL，回收本次根和中间页表页，保留调用者的 trapframe。
+  int proc_clone_resources(proc_t *dst, const proc_t *src, int pid):
+    pre:
+    - dst全零且与src不同；src为合法完整的用户地址空间；调用者独占并稳定持有两者及组对象，源不在其他hart上运行或修改。
+    effects:
+    - 源有组时按实际用户叶页数在物理分配前通过agent_attach原子预留全部数据页及一个成员名额；组策略对象共享，不复制或扩权。
+    - 复制独立trapframe、页表、全部用户页及mmap节点；内核栈与context保持零；用户寄存器复制但a0为0，内核相关trapframe四字段清零。
+    post:
+    - 成功0；目标只是未发布的资源快照，没有fork ABI或可运行状态，调用者未来需初始化内核栈/上下文并发布。
+    - 失败-1，销毁目标资源、退还预算和成员，dst全零，源不变；峰值及attach/detach审计保留尝试历史。
+  void proc_release_resources(proc_t *p):
+    pre:
+    - p有效且由调用者独占；不绑定当前cpu.proc，不在其他hart运行，内核页表生效。
+    effects:
+    - 先销毁用户页表，再detach、释放trapframe和mmap节点，最后将PCB清零；预映射内核栈不归本函数管理。
+    post:
+    - 动态资源与组预留归还；全零PCB可以重复调用，运行层须另行管理内核栈及进程槽位。
   void proc_make_first(void):
     pre:
     - boot_hartid 在 S-mode 执行，内核页表、KSTACK(0)、内存和 trap 已就绪；无已发布用户进程。

@@ -27,22 +27,90 @@ pgtbl_t proc_pgtbl_init(uint64 trapframe)
     return root;
 }
 
-static void release_first(first_resources_t *r)
+void proc_release_resources(proc_t *p)
 {
-    // 当前已返回内核页表；用户页和页表由统一销毁函数回收。
-    uvm_destroy_pgtbl(r->proc.pgtbl);
+    assert(p && myproc() != p, "proc_release: process still current");
+    // 调用者保证该地址空间已停止使用；预映射的内核栈由运行层持有。
+    uvm_destroy_pgtbl(p->pgtbl);
 #if AEGIS
-    agent_detach(&r->proc);
+    agent_detach(p);
 #endif
-    if (r->proc.tf)
-        pmem_free((uint64)r->proc.tf, true);
-    while (r->proc.mmap)
+    if (p->tf)
+        pmem_free((uint64)p->tf, true);
+    while (p->mmap)
     {
-        mmap_region_t *node = r->proc.mmap;
-        r->proc.mmap = node->next;
+        mmap_region_t *node = p->mmap;
+        p->mmap = node->next;
         mmap_region_free(node);
     }
-    memset(r, 0, sizeof(*r));
+    memset(p, 0, sizeof(*p));
+}
+
+#if AEGIS
+static uint64 user_pages(pgtbl_t root, int level)
+{
+    uint64 count = 0;
+    for (int i = 0; i < 512; i++)
+    {
+        pte_t pte = root[i];
+        if (!(pte & PTE_V)) continue;
+        if (PTE_CHECK(pte))
+        {
+            assert(level > 0, "proc_clone: malformed page table");
+            count += user_pages((pgtbl_t)PTE_TO_PA(pte), level - 1);
+        }
+        else if (pte & PTE_U)
+        {
+            assert(level == 0, "proc_clone: unexpected huge page");
+            count++;
+        }
+    }
+    return count;
+}
+#endif
+
+int proc_clone_resources(proc_t *dst, const proc_t *src, int pid)
+{
+    assert(dst && src && dst != src && src->pgtbl && src->tf,
+           "proc_clone: invalid owner");
+    for (uint64 i = 0; i < sizeof(*dst); i++)
+        assert(!((uint8 *)dst)[i], "proc_clone: destination not empty");
+    dst->pid = pid;
+#if AEGIS
+    // 源由调用者稳定持有；先在同一组锁内预留成员和整批数据页。
+    if (src->agent && agent_attach(dst, src->agent, user_pages(src->pgtbl, 2)))
+        goto failed;
+#endif
+    dst->tf = pmem_alloc(true);
+    if (!dst->tf) goto failed;
+    dst->pgtbl = proc_pgtbl_init((uint64)dst->tf);
+    if (!dst->pgtbl) goto failed;
+    mmap_region_t **tail = &dst->mmap;
+    for (mmap_region_t *r = src->mmap; r; r = r->next)
+    {
+        mmap_region_t *node = mmap_region_alloc();
+        if (!node) goto failed;
+        *node = *r;
+        node->next = NULL;
+        *tail = node;
+        tail = &node->next;
+    }
+    if (uvm_copy_pgtbl(src->pgtbl, dst->pgtbl, src->heap_top,
+                       src->ustack_npage, src->mmap))
+        goto failed;
+    dst->heap_top = src->heap_top;
+    dst->ustack_npage = src->ustack_npage;
+    *dst->tf = *src->tf;
+    dst->tf->a0 = 0;
+    dst->tf->user_to_kern_satp = 0;
+    dst->tf->user_to_kern_sp = 0;
+    dst->tf->user_to_kern_trapvector = 0;
+    dst->tf->user_to_kern_hartid = 0;
+    // kstack/ctx 保持零：资源准备成功不等于可被调度运行。
+    return 0;
+failed:
+    proc_release_resources(dst);
+    return -1;
 }
 
 static bool construct_first(first_resources_t *r)
@@ -86,7 +154,7 @@ static bool construct_first(first_resources_t *r)
     p->ctx.sp = p->kstack + PGSIZE;
     return true;
 failed:
-    release_first(r);
+    proc_release_resources(&r->proc);
     return false;
 }
 
@@ -109,7 +177,7 @@ void proc_make_first(void)
 #if AEGIS
     if (agent_attach_boot(&first.proc))
     {
-        release_first(&first);
+        proc_release_resources(&first.proc);
         if (was_enabled) intr_on();
         printf("aegis boot policy rejected process\n");
         return;
@@ -120,7 +188,7 @@ void proc_make_first(void)
     swtch(&cpu->ctx, &first.proc.ctx);
     // 故障进程不再调度，当前已恢复到CPU早期栈与内核页表。
     cpu->proc = NULL;
-    release_first(&first);
+    proc_release_resources(&first.proc);
     assert(pmem_available(false) == user_before,
            "proc_make_first: leaked user resources");
     assert(pmem_available(true) == kernel_before,
@@ -168,7 +236,7 @@ void proc_self_test(void)
                    (PTE_V | PTE_R | PTE_X | PTE_MACHINE), "proc test: trampoline exposed");
             assert(PTE_FLAGS(*vm_getpte(root, TRAPFRAME, false)) ==
                    (PTE_V | PTE_R | PTE_W | PTE_MACHINE), "proc test: trapframe exposed");
-            release_first(&first);
+            proc_release_resources(&first.proc);
             completed = true;
         }
         assert(myproc() == NULL && mycpu()->noff == 0 && pmem_available(true) == kernel_before &&

@@ -61,6 +61,7 @@ void main(void)
 #ifdef LAB5_TEST
         proc_self_test();
         lab5_self_test();
+        proc_clone_self_test();
 #endif
 #ifdef AGENT_TEST
         agent_self_test();
