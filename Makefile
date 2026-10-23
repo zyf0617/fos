@@ -14,13 +14,33 @@ include common.mk
 
 BOOT_USER ?= 1
 AEGIS ?= 0
+AEGIS_AUDIT ?= $(AEGIS)
 AGENT_TEST ?= 0
+AGENT_BENCH ?= 0
+ifneq ($(AGENT_TEST),0)
+ifneq ($(AGENT_TEST),1)
+$(error AGENT_TEST must be 0 or 1)
+endif
+endif
+ifneq ($(AGENT_BENCH),0)
+ifneq ($(AGENT_BENCH),1)
+$(error AGENT_BENCH must be 0 or 1)
+endif
+endif
 ifneq ($(AEGIS),0)
 ifneq ($(AEGIS),1)
 $(error AEGIS must be 0 or 1)
 endif
 endif
-CFLAGS += -DAEGIS=$(AEGIS)
+ifneq ($(AEGIS_AUDIT),0)
+ifneq ($(AEGIS_AUDIT),1)
+$(error AEGIS_AUDIT must be 0 or 1)
+endif
+ifneq ($(AEGIS),1)
+$(error AEGIS_AUDIT=1 requires AEGIS=1)
+endif
+endif
+CFLAGS += -DAEGIS=$(AEGIS) -DAEGIS_AUDIT=$(AEGIS_AUDIT)
 ifeq ($(AGENT_TEST),1)
 ifneq ($(AEGIS),1)
 $(error AGENT_TEST=1 requires AEGIS=1)
@@ -32,6 +52,12 @@ ifeq ($(PLATFORM),vf2)
 CFLAGS += -DVISIONFIVE2
 endif
 LAB5_TEST ?= 0
+ifeq ($(AGENT_BENCH),1)
+ifneq ($(filter 1,$(AGENT_TEST) $(LAB5_TEST) $(TESTING)),)
+$(error AGENT_BENCH cannot be combined with other test modes)
+endif
+CFLAGS += -DAGENT_BENCH
+endif
 ifeq ($(LAB5_TEST),1)
 CFLAGS += -DLAB5_TEST
 endif
@@ -86,6 +112,9 @@ endif
 ifeq ($(AGENT_TEST),1)
 UserSourceFile = tests/agent_user.c
 endif
+ifeq ($(AGENT_BENCH),1)
+UserSourceFile = tests/agent_bench.c
+endif
 
 # 生成目标文件（.o）路径列表
 KernelOBJ = $(patsubst $(KernelPath)/%.S, $(TARGET)/kernel/%.o, $(filter %.S, $(KernelSourceFile)))
@@ -99,6 +128,9 @@ UserOBJ += $(TARGET)/user/user_context.o
 endif
 ifeq ($(AGENT_TEST),1)
 UserOBJ = $(TARGET)/user/agent_user.o
+endif
+ifeq ($(AGENT_BENCH),1)
+UserOBJ = $(TARGET)/user/agent_bench.o
 endif
 
 # QEMU模拟器配置
@@ -195,6 +227,9 @@ $(TARGET)/user/lab5_user.o: tests/lab5_user.c | $(TARGET)
 $(TARGET)/user/agent_user.o: tests/agent_user.c | $(TARGET)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(TARGET)/user/agent_bench.o: tests/agent_bench.c | $(TARGET)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
 $(KERNEL_LD): kernel.ld $(TARGET)/build-config | $(TARGET)
 	$(CC) -E -P -x c $(if $(filter vf2,$(PLATFORM)),-DVISIONFIVE2) $< -o $@
 
@@ -226,7 +261,10 @@ test-lab3:
 test-agent:
 	python3 tests/test_agent.py
 
-.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5 test-agent
+bench-agent:
+	python3 tests/bench_agent.py
+
+.PHONY: build run clean debug test test-lab3 test-lab4 test-lab5 test-agent bench-agent
 
 # 配置变化也必须重编译，避免测试宏或用户入口混入另一种镜像。
 $(TARGET)/build-config: FORCE | $(TARGET)

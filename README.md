@@ -60,7 +60,9 @@ python3 tests/test_lab5.py --group pagetable
 python3 tests/test_lab5.py --group platform
 ```
 
-`make test-agent` 检查组共享预算、heap/stack/mmap的配额与OOM回滚、真实ecall权限拒绝、预算复用、审计覆盖及故障清理；另验证开启Aegis的Lab5负载和同目录开关切换。专用镜像配置为4页预算并拒绝copyout；普通 `make run AEGIS=1` 使用64页、1成员、全部课程服务权限。用户目前不能修改这些内核策略。性能开销尚未测量。
+`make test-agent` 检查组共享预算、双hart单页预算竞争、只收紧策略与一致快照、heap/stack/mmap的配额与OOM回滚、真实ecall权限拒绝、预算复用、审计覆盖及故障清理；另验证关闭审计时保护仍有效、开启Aegis的Lab5负载和同目录开关切换。专用镜像配置为4页预算并拒绝copyout；普通 `make run AEGIS=1` 使用64页、1成员、全部课程服务权限。用户目前不能修改这些内核策略。
+
+`AEGIS_AUDIT=0` 可独立关闭事件采集并保留保护，默认等于 `AEGIS`。`make bench-agent` 比较基线、仅保护、保护加审计三种配置的相同真实ecall用户负载，保存原始批次和环境。已保存的[QEMU微基准结果](docs/benchmarks/agent/2026-10-23/README.md)用于描述模拟环境下的成本，不能推导为实板或真实Agent性能。
 
 | 验收 | 内容 |
 | --- | --- |

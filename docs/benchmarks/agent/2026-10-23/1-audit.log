@@ -1,0 +1,139 @@
+
+OpenSBI v1.7
+   ____                    _____ ____ _____
+  / __ \                  / ____|  _ \_   _|
+ | |  | |_ __   ___ _ __ | (___ | |_) || |
+ | |  | | '_ \ / _ \ '_ \ \___ \|  _ < | |
+ | |__| | |_) |  __/ | | |____) | |_) || |_
+  \____/| .__/ \___|_| |_|_____/|____/_____|
+        | |
+        |_|
+
+Platform Name               : riscv-virtio,qemu
+Platform Features           : medeleg
+Platform HART Count         : 2
+Platform IPI Device         : aclint-mswi
+Platform Timer Device       : aclint-mtimer @ 10000000Hz
+Platform Console Device     : uart8250
+Platform HSM Device         : ---
+Platform PMU Device         : ---
+Platform Reboot Device      : syscon-reboot
+Platform Shutdown Device    : syscon-poweroff
+Platform Suspend Device     : ---
+Platform CPPC Device        : ---
+Firmware Base               : 0x80000000
+Firmware Size               : 329 KB
+Firmware RW Offset          : 0x40000
+Firmware RW Size            : 73 KB
+Firmware Heap Offset        : 0x48000
+Firmware Heap Size          : 41 KB (total), 2 KB (reserved), 12 KB (used), 26 KB (free)
+Firmware Scratch Size       : 4096 B (total), 1400 B (used), 2696 B (free)
+Runtime SBI Version         : 3.0
+Standard SBI Extensions     : time,rfnc,ipi,base,hsm,srst,pmu,dbcn,fwft,legacy,dbtr,sse
+Experimental SBI Extensions : none
+
+Domain0 Name                : root
+Domain0 Boot HART           : 0
+Domain0 HARTs               : 0*,1*
+Domain0 Region00            : 0x0000000000100000-0x0000000000100fff M: (I,R,W) S/U: (R,W)
+Domain0 Region01            : 0x0000000010000000-0x0000000010000fff M: (I,R,W) S/U: (R,W)
+Domain0 Region02            : 0x0000000002000000-0x000000000200ffff M: (I,R,W) S/U: ()
+Domain0 Region03            : 0x0000000080040000-0x000000008005ffff M: (R,W) S/U: ()
+Domain0 Region04            : 0x0000000080000000-0x000000008003ffff M: (R,X) S/U: ()
+Domain0 Region05            : 0x000000000c400000-0x000000000c5fffff M: (I,R,W) S/U: (R,W)
+Domain0 Region06            : 0x000000000c000000-0x000000000c3fffff M: (I,R,W) S/U: (R,W)
+Domain0 Region07            : 0x0000000000000000-0xffffffffffffffff M: () S/U: (R,W,X)
+Domain0 Next Address        : 0x0000000080200000
+Domain0 Next Arg1           : 0x0000000088000000
+Domain0 Next Mode           : S-mode
+Domain0 SysReset            : yes
+Domain0 SysSuspend          : yes
+
+Boot HART ID                : 0
+Boot HART Domain            : root
+Boot HART Priv Version      : v1.12
+Boot HART Base ISA          : rv64imafdch
+Boot HART ISA Extensions    : sstc,zicntr,zihpm,zicboz,zicbom,sdtrig,svadu
+Boot HART PMP Count         : 16
+Boot HART PMP Granularity   : 2 bits
+Boot HART PMP Address Bits  : 54
+Boot HART MHPM Info         : 16 (0x0007fff8)
+Boot HART Debug Triggers    : 2 triggers
+Boot HART MIDELEG           : 0x0000000000001666
+Boot HART MEDELEG           : 0x0000000000f4b509
+cpu 0 is booting with OpenSBI!
+kernel memmove self-test passed
+cpu 1 is booting with OpenSBI!
+lab-2 memory self-test passed
+lab-4 entering user mode
+aegis bench workload=query sample=0 ticks=141670 iterations=1024
+aegis bench workload=query sample=1 ticks=140510 iterations=1024
+aegis bench workload=query sample=2 ticks=141100 iterations=1024
+aegis bench workload=query sample=3 ticks=142270 iterations=1024
+aegis bench workload=query sample=4 ticks=143710 iterations=1024
+aegis bench workload=query sample=5 ticks=144120 iterations=1024
+ticks = 1
+aegis bench workload=query sample=6 ticks=133310 iterations=1024
+aegis bench workload=query sample=7 ticks=132970 iterations=1024
+aegis bench workload=query sample=8 ticks=135470 iterations=1024
+aegis bench workload=query sample=9 ticks=136870 iterations=1024
+aegis bench workload=query sample=10 ticks=144600 iterations=1024
+aegis bench workload=query sample=11 ticks=145630 iterations=1024
+aegis bench workload=query sample=12 ticks=145410 iterations=1024
+ticks = 2
+aegis bench workload=query sample=13 ticks=144080 iterations=1024
+aegis bench workload=query sample=14 ticks=145030 iterations=1024
+aegis bench workload=query sample=15 ticks=142990 iterations=1024
+aegis bench workload=query sample=16 ticks=128620 iterations=1024
+aegis bench workload=query sample=17 ticks=132590 iterations=1024
+aegis bench workload=query sample=18 ticks=137330 iterations=1024
+ticks = 3
+lab-3 timer interrupt test passed
+aegis bench workload=query sample=19 ticks=143520 iterations=1024
+aegis bench workload=query sample=20 ticks=168900 iterations=1024
+aegis bench workload=query sample=21 ticks=145900 iterations=1024
+aegis bench workload=query sample=22 ticks=147040 iterations=1024
+aegis bench workload=query sample=23 ticks=144980 iterations=1024
+aegis bench workload=query sample=24 ticks=144590 iterations=1024
+aegis bench workload=query sample=25 ticks=137380 iterations=1024
+aegis bench workload=query sample=26 ticks=131290 iterations=1024
+aegis bench workload=query sample=27 ticks=133800 iterations=1024
+aegis bench workload=query sample=28 ticks=137070 iterations=1024
+aegis bench workload=query sample=29 ticks=146490 iterations=1024
+aegis bench workload=query sample=30 ticks=145720 iterations=1024
+aegis bench workload=map-cycle sample=0 ticks=105100 iterations=128
+aegis bench workload=map-cycle sample=1 ticks=103470 iterations=128
+aegis bench workload=map-cycle sample=2 ticks=103840 iterations=128
+aegis bench workload=map-cycle sample=3 ticks=104960 iterations=128
+aegis bench workload=map-cycle sample=4 ticks=106210 iterations=128
+aegis bench workload=map-cycle sample=5 ticks=101640 iterations=128
+aegis bench workload=map-cycle sample=6 ticks=99650 iterations=128
+aegis bench workload=map-cycle sample=7 ticks=103260 iterations=128
+aegis bench workload=map-cycle sample=8 ticks=102680 iterations=128
+aegis bench workload=map-cycle sample=9 ticks=103220 iterations=128
+aegis bench workload=map-cycle sample=10 ticks=105570 iterations=128
+aegis bench workload=map-cycle sample=11 ticks=103750 iterations=128
+aegis bench workload=map-cycle sample=12 ticks=104140 iterations=128
+aegis bench workload=map-cycle sample=13 ticks=103540 iterations=128
+aegis bench workload=map-cycle sample=14 ticks=104520 iterations=128
+aegis bench workload=map-cycle sample=15 ticks=103120 iterations=128
+aegis bench workload=map-cycle sample=16 ticks=102810 iterations=128
+aegis bench workload=map-cycle sample=17 ticks=102600 iterations=128
+aegis bench workload=map-cycle sample=18 ticks=100280 iterations=128
+aegis bench workload=map-cycle sample=19 ticks=101650 iterations=128
+aegis bench workload=map-cycle sample=20 ticks=102240 iterations=128
+aegis bench workload=map-cycle sample=21 ticks=104480 iterations=128
+aegis bench workload=map-cycle sample=22 ticks=103730 iterations=128
+aegis bench workload=map-cycle sample=23 ticks=103310 iterations=128
+aegis bench workload=map-cycle sample=24 ticks=103420 iterations=128
+aegis bench workload=map-cycle sample=25 ticks=104160 iterations=128
+aegis bench workload=map-cycle sample=26 ticks=103590 iterations=128
+aegis bench workload=map-cycle sample=27 ticks=103420 iterations=128
+aegis bench workload=map-cycle sample=28 ticks=104960 iterations=128
+aegis bench workload=map-cycle sample=29 ticks=101630 iterations=128
+aegis bench workload=map-cycle sample=30 ticks=100230 iterations=128
+aegis BENCH PASS
+lab-4 user fault: cause=0x000000000000000d epc=0x0000000000001108 stval=0x0000000000000000
+lab-4 faulted process cleaned up
+aegis group cleanup PASS
+qemu-system-riscv64: terminating on signal 15 from pid 13412 (<unknown process>)

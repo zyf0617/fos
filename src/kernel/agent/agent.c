@@ -3,9 +3,11 @@
 #if AEGIS
 
 static agent_group_t boot_group;
+#if AEGIS_AUDIT
 static spinlock_t audit_lock;
 static agent_event_t events[AGENT_AUDIT_CAPACITY];
 static uint64 sequence;
+#endif
 
 void agent_group_init(agent_group_t *g, uint64 id, uint64 pages,
                       uint64 processes, uint64 syscall_mask)
@@ -21,8 +23,10 @@ void agent_group_init(agent_group_t *g, uint64 id, uint64 pages,
 
 void agent_init(void)
 {
+#if AEGIS_AUDIT
     spinlock_init(&audit_lock, "agent.audit");
     sequence = 0;
+#endif
 #ifdef AGENT_TEST
     agent_group_init(&boot_group, 1, 4, 1, AGENT_SYSCALL_MASK & ~(1ul << SYS_copyout));
 #else
@@ -32,6 +36,7 @@ void agent_init(void)
 
 void agent_record(proc_t *p, uint64 kind, uint64 detail, uint64 result)
 {
+#if AEGIS_AUDIT
     if (!p || !p->agent)
         return;
     agent_group_t *g = p->agent;
@@ -43,6 +48,36 @@ void agent_record(proc_t *p, uint64 kind, uint64 detail, uint64 result)
     events[(next - 1) % AGENT_AUDIT_CAPACITY] =
         (agent_event_t){next, r_time(), id, (uint64)p->pid, kind, detail, result, pages};
     spinlock_release(&audit_lock);
+#else
+    (void)p; (void)kind; (void)detail; (void)result;
+#endif
+}
+
+void agent_snapshot(agent_group_t *g, agent_stats_t *out)
+{
+    assert(g && out, "agent_snapshot: NULL argument");
+    spinlock_acquire(&g->lock);
+    *out = (agent_stats_t){g->id, g->page_limit, g->pages, g->peak_pages,
+                          g->process_limit, g->processes, g->syscall_mask,
+                          g->quota_denied, g->capability_denied};
+    spinlock_release(&g->lock);
+}
+
+// 内核管理接口只允许收紧；不得在活动用量之下设置限额或增加权限。
+int agent_restrict(agent_group_t *g, uint64 pages, uint64 processes, uint64 syscall_mask)
+{
+    spinlock_acquire(&g->lock);
+    if (pages > g->page_limit || pages < g->pages || processes > g->process_limit ||
+        processes < g->processes || (syscall_mask & ~g->syscall_mask))
+    {
+        spinlock_release(&g->lock);
+        return -1;
+    }
+    g->page_limit = pages;
+    g->process_limit = processes;
+    g->syscall_mask = syscall_mask;
+    spinlock_release(&g->lock);
+    return 0;
 }
 
 int agent_attach(proc_t *p, agent_group_t *g, uint64 initial_pages)
@@ -58,6 +93,7 @@ int agent_attach(proc_t *p, agent_group_t *g, uint64 initial_pages)
     }
     g->processes++;
     g->pages += initial_pages;
+    if (g->pages > g->peak_pages) g->peak_pages = g->pages;
     p->agent_pages = initial_pages;
     p->agent = g;
     spinlock_release(&g->lock);
@@ -100,11 +136,13 @@ int agent_charge(pgtbl_t root, uint64 pages)
     spinlock_acquire(&g->lock);
     if (pages > g->page_limit - g->pages)
     {
+        g->quota_denied++;
         spinlock_release(&g->lock);
         agent_record(p, AGENT_QUOTA_DENY, pages, (uint64)-1);
         return -1;
     }
     g->pages += pages;
+    if (g->pages > g->peak_pages) g->peak_pages = g->pages;
     p->agent_pages += pages;
     spinlock_release(&g->lock);
     return 0;
@@ -130,6 +168,7 @@ bool agent_allowed(proc_t *p, uint64 number)
     agent_group_t *g = p->agent;
     spinlock_acquire(&g->lock);
     bool allowed = number < 8 && (g->syscall_mask & (1ul << number));
+    if (!allowed) g->capability_denied++;
     spinlock_release(&g->lock);
     return allowed;
 }
@@ -137,6 +176,7 @@ bool agent_allowed(proc_t *p, uint64 number)
 uint32 agent_audit_read(uint64 after, agent_event_t *out, uint32 capacity, uint64 *lost)
 {
     assert(lost && (out || !capacity), "agent_audit_read: invalid buffer");
+#if AEGIS_AUDIT
     spinlock_acquire(&audit_lock);
     *lost = 0;
     uint32 count = 0;
@@ -150,6 +190,11 @@ uint32 agent_audit_read(uint64 after, agent_event_t *out, uint32 capacity, uint6
     }
     spinlock_release(&audit_lock);
     return count;
+#else
+    (void)after;
+    *lost = 0;
+    return 0;
+#endif
 }
 
 void agent_audit_dump(void)

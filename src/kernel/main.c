@@ -80,6 +80,10 @@ void main(void)
     if (hartid != boot_hartid)
         lab5_pool_worker();
 #endif
+#ifdef AGENT_TEST
+    if (hartid != boot_hartid)
+        agent_test_worker();
+#endif
 
 #if defined(LAB4_TEST) && LAB4_SCENARIO >= 6 && LAB4_SCENARIO <= 8
     if (hartid == boot_hartid)

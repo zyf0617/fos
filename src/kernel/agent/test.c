@@ -2,7 +2,64 @@
 #include "../syscall/mod.h"
 #ifdef AGENT_TEST
 
+#if AEGIS_AUDIT
 static agent_event_t captured[AGENT_AUDIT_CAPACITY];
+#endif
+static agent_group_t concurrent_group;
+static proc_t concurrent_members[NCPU];
+static int concurrent_start, concurrent_attempted, concurrent_success, concurrent_done, concurrent_claim;
+
+static void concurrent_churn(void)
+{
+    proc_t *p = &concurrent_members[mycpuid()];
+    mycpu()->proc = p;
+    bool first = !agent_charge(p->pgtbl, 1);
+    if (first) __atomic_fetch_add(&concurrent_success, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&concurrent_attempted, 1, __ATOMIC_RELEASE);
+    while (__atomic_load_n(&concurrent_attempted, __ATOMIC_ACQUIRE) != NCPU - FIRST_HART) ;
+    if (first) agent_uncharge(p->pgtbl, 1);
+    for (int i = 0; i < 1000; i++)
+        if (!agent_charge(p->pgtbl, 1))
+        {
+            assert(__sync_bool_compare_and_swap(&concurrent_claim, 0, 1),
+                   "agent test: concurrent quota oversubscribed");
+            __sync_lock_release(&concurrent_claim);
+            agent_uncharge(p->pgtbl, 1);
+        }
+    mycpu()->proc = NULL;
+}
+
+void agent_test_worker(void)
+{
+    while (!__atomic_load_n(&concurrent_start, __ATOMIC_ACQUIRE)) ;
+    concurrent_churn();
+    __atomic_fetch_add(&concurrent_done, 1, __ATOMIC_RELEASE);
+}
+
+static void concurrent_test(void)
+{
+    agent_group_init(&concurrent_group, 44, 1, NCPU - FIRST_HART, AGENT_SYSCALL_MASK);
+    for (int i = FIRST_HART; i < NCPU; i++)
+    {
+        concurrent_members[i].pgtbl = pmem_alloc(true);
+        assert(concurrent_members[i].pgtbl && !agent_attach(&concurrent_members[i], &concurrent_group, 0),
+               "agent test: concurrent setup");
+    }
+    __atomic_store_n(&concurrent_start, 1, __ATOMIC_RELEASE);
+    concurrent_churn();
+    while (__atomic_load_n(&concurrent_done, __ATOMIC_ACQUIRE) != NCPU - FIRST_HART - 1) ;
+    agent_stats_t stats;
+    agent_snapshot(&concurrent_group, &stats);
+    assert(concurrent_success == 1 && stats.peak_pages == 1 && !stats.pages &&
+           stats.quota_denied >= NCPU - FIRST_HART - 1,
+           "agent test: concurrent reservation barrier");
+    for (int i = FIRST_HART; i < NCPU; i++)
+    {
+        uvm_destroy_pgtbl(concurrent_members[i].pgtbl);
+        agent_detach(&concurrent_members[i]);
+    }
+    printf("aegis concurrent budget PASS\n");
+}
 
 static uint64 hash_tree(pgtbl_t root, int level)
 {
@@ -118,6 +175,7 @@ void agent_self_test(void)
     assert(!uvm_munmap(mapping, 2) && group.pages == 2 && !p.mmap,
            "agent test: mmap release");
 
+#if AEGIS_AUDIT
     for (int i = 0; i < AGENT_AUDIT_CAPACITY + 6; i++)
         agent_record(&p, AGENT_SYSCALL, i, 0);
     uint64 lost;
@@ -131,6 +189,24 @@ void agent_self_test(void)
     assert(agent_audit_read(~0ul, captured, 1, &lost) == 0 && !lost &&
            agent_audit_read(0, NULL, 0, &lost) == 0 && lost,
            "agent test: audit boundaries");
+#else
+    uint64 lost = 99;
+    assert(agent_audit_read(0, NULL, 0, &lost) == 0 && !lost,
+           "agent test: disabled audit is not empty");
+#endif
+    agent_stats_t stats;
+    agent_snapshot(&group, &stats);
+    assert(stats.pages == 2 && stats.peak_pages == 4 && stats.processes == 1 &&
+           stats.quota_denied >= 3 && stats.capability_denied == 1,
+           "agent test: stats snapshot");
+    assert(agent_restrict(&group, 1, 1, 0) == -1 &&
+           agent_restrict(&group, 4, 0, 0) == -1 &&
+           agent_restrict(&group, 4, 1, AGENT_SYSCALL_MASK) == -1,
+           "agent test: invalid restriction accepted");
+    assert(!agent_restrict(&group, 2, 1, 0) && !agent_allowed(&p, SYS_printf) &&
+           agent_restrict(&group, 3, 1, 0) == -1 &&
+           agent_restrict(&group, 2, 1, 1) == -1,
+           "agent test: policy relaxed");
     uvm_destroy_pgtbl(p.pgtbl);
     p.pgtbl = NULL;
     agent_detach(&p);
@@ -145,6 +221,7 @@ void agent_self_test(void)
     agent_detach(&p);
     assert(agent_allowed(&p, SYS_copyout), "agent test: ordinary process restricted");
     mycpu()->proc = NULL;
+    concurrent_test();
     assert(pmem_available(true) == kernel && pmem_available(false) == user &&
            mmap_available() == nodes && !mycpu()->noff,
            "agent test: final resource leak");
