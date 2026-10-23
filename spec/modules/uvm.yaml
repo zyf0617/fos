@@ -51,7 +51,7 @@ functions:
     effects:
     - 验证len不下穿USER_HEAP_BASE；解除[PGROUNDUP(new),PGROUNDUP(old))，保留末尾部分页。
     post:
-    - 成功返回新堆顶，非法返回0；解除后本地TLB失效再归还用户页。
+    - 成功返回新堆顶，非法返回0；解除后本地TLB失效再归还用户页；回收解除范围涉及的空中间页表，保留根及仍有映射的相邻分支。
   int64 uvm_ustack_grow(pgtbl_t pgtbl, uint64 old_ustack_npage, uint64 fault_addr);:
     pre:
     - 已有old_ustack_npage个连续栈页，页表独占。
@@ -114,4 +114,4 @@ functions:
     effects:
     - 先确认整个范围被mmap链完整覆盖及页表一致，预留中间拆分节点；再解除、裁剪或删除所有覆盖区间。
     post:
-    - 成功0，非法、含空洞或节点不足-1；失败原链和映射不变；本地TLB失效后回收物理页。
+    - 成功0，非法、含空洞或节点不足-1；失败原链和映射不变；本地TLB失效后回收物理页及解除范围涉及的空中间页表，保留根和范围外映射。

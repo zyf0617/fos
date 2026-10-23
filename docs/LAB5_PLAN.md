@@ -110,15 +110,15 @@ ABI 按规格统一为编号 0–7：helloworld、copyin、copyout、copyinstr�
 
 ## 验证入口与交付
 
-以下新增入口为计划项，当前尚不存在：
+以下验收入口已实现：
 
-- `make test-lab5`：拟新增的 Ubuntu QEMU 自动验收，按场景隔离构建和日志；支持指定 OpenSBI 固件。
-- `python3 tests/test_lab5.py --group <copy|heap-stack|mmap|pagetable|platform>`：拟新增的分组回归。
-- `make build PLATFORM=qemu` / `make build PLATFORM=vf2`：拟接入的平台构建；不能把当前 Lab 4 Makefile 忽略 PLATFORM 的构建误记为双平台通过。
+- `make test-lab5`：QEMU 自动验收，按场景隔离构建和日志；支持指定 OpenSBI 固件，Linux 宿主另运行 MMIO 探针。
+- `python3 tests/test_lab5.py --group <copy|heap-stack|mmap|pagetable|platform>`：分组回归。
+- `make build PLATFORM=qemu` / `make build PLATFORM=vf2`：平台隔离构建，平台组另检查镜像布局；VF2 实板运行仍待验收。
 - 沿用并适配原 Lab 3/4 基线测试；旧快照行为与 Lab 5 新增自动扩栈/启动核行为的差异在测试中显式注明。
 
 每个阶段保存构建输出、QEMU 串口、PASS/FAIL 原因、资源计数及测试配置；发布结论分别列出“QEMU 通过”“VF2 构建/镜像检查通过”“VF2 实板通过”。不凭输出截图替代程序结果、权限断言和回收检查。
 
 建议提交顺序：规格 → 平台及骨架 → 用户复制与 syscall → heap/stack → mmap → 复制/销毁 → VF2 与综合验收。依赖失败时留在当前阶段修复，不将未通过的阶段标记完成。
 
-2026-10-22 已在 lab5 执行 M0–M5，并完成 M6 的双平台构建、镜像和宿主探针部分。用户确认实板暂时不能接线，因此实板部分待后续进行。lab5 尚未推送。
+2026-10-22 已在 lab5 执行 M0–M5，并完成 M6 的双平台构建、镜像和宿主探针部分，提交 `333f963` 已推送至 `origin/lab5`。用户确认实板暂时不能接线，因此实板部分待后续进行。

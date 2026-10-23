@@ -45,6 +45,24 @@ export OPENSBI="$OSLAB_ROOT/toolchain/usr/lib/riscv64-linux-gnu/opensbi/generic/
 
 日志位于 `target/tests/lab5/`、`target/tests/`，这些是忽略提交的可再生产物。每场景保留 build.log 及串口/宿主探针日志。默认镜像不包含测试宏启用的探针。
 
+## 2026-10-23：缩堆与 munmap 的空页表回收
+
+此前用户数据页已归还，但解除映射后空的中间页表会保留至进程销毁。通用 `vm_unmappages` 的保留语义继续适用于底层调用者；用户内存层新增解除后的局部清理，只遍历本次范围覆盖的分支。空表先从父项移除、执行本地 `sfence.vma`，再归还内核页池。根页表、非空分支、trapframe/trampoline 均保留，清理不申请资源。
+
+先新增缩堆后的页表摘要与两类空闲页计数断言，在旧实现上运行 `python3 tests/test_lab5.py --group heap-stack`，得到预期的事务/资源断言失败；接入清理后同一测试通过。新增覆盖跨 2MiB 和 1GiB 边界后缩回，以及 mmap 完整解除后 PTE 树、两类页池、节点池和进程元数据恢复原状。已有跨权限裁剪、拆分失败及页内缩堆测试继续验证相邻映射与失败原子性。
+
+本轮在 macOS 原生 RISC-V GCC/QEMU 上重新执行：
+
+| 检查 | 结果 |
+| --- | --- |
+| `python3 tests/test_lab5.py --group heap-stack` | PASS：新增资源回收断言及原有 OOM/栈增长场景 |
+| `make test-lab5`（等价执行 `python3 tests/test_lab5.py`） | PASS：全部 Lab 5 内核/用户场景、权限故障与清理、默认演示、QEMU/VF2 交替构建及 Image 检查 |
+| `make test-lab4` | PASS：增量构建、三种 panic、timer/UART 现场、未知调用和权限故障 |
+| `make test-lab3` | PASS：内核态内存/中断基线 |
+| 18 个 YAML 文件解析、`git diff --check` | PASS |
+
+Linux MMIO 宿主探针本轮在 macOS 按测试器设计跳过；上文 2026-10-22 的 Ubuntu 结果是历史证据，本轮没有重新运行 Linux 探针或连接 VF2 实板。
+
 ## 本轮发现并修正的继承问题
 
 - UART 原 IER_RX_ENABLE 与 IER_TX_ENABLE 的位定义相反。旧串口回显检查不足以判断中断源配置；宿主探针检查真实寄存器值后暴露该问题。现改为 RX=bit0、TX=bit1，正常只开启 RX。修正后重新通过 Ubuntu 的 Lab 5/4/3 回归。

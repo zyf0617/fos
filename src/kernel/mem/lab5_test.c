@@ -113,11 +113,18 @@ static void heap_stack_test(void)
         {
             success = true;
             assert(uvm_heap_ungrow(root, result, 3 * PGSIZE) == top, "lab5 heap: shrink");
+            unchanged(root, before);
             break;
         }
         unchanged(root, before);
     }
     assert(success, "lab5 heap: no successful transaction");
+    // 跨1GiB边界同时产生两级新页表；缩回后应立即归还，不等进程退出。
+    const uint64 distant = (1ul << 30) - PGSIZE;
+    assert(uvm_heap_grow(root, distant, 3 * PGSIZE) == distant + 3 * PGSIZE &&
+           uvm_heap_ungrow(root, distant + 3 * PGSIZE, 3 * PGSIZE) == distant,
+           "lab5 heap: cross root boundary");
+    unchanged(root, before);
     assert(uvm_heap_grow(root, USER_HEAP_BASE, 1) == USER_HEAP_BASE + 1, "lab5 heap: subpage grow");
     uint32 user = pmem_available(false);
     assert(uvm_heap_grow(root, USER_HEAP_BASE + 1, 7) == USER_HEAP_BASE + 8 &&
@@ -185,6 +192,7 @@ static void mmap_test(void)
     process.pgtbl = make_test_root(&tf);
     mycpu()->proc = &process;
     snapshot_t before = snapshot(process.pgtbl);
+    snapshot_t empty = before;
     bool success = false;
     for (int n = 0; n < 16; n++)
     {
@@ -220,6 +228,7 @@ static void mmap_test(void)
     assert(uvm_mmap(0, 1, PTE_R | PTE_W) == MMAP_BEGIN + PGSIZE, "lab5 mmap: first fit");
     assert(!uvm_munmap(MMAP_BEGIN, 2) && !uvm_munmap(MMAP_BEGIN + 4 * PGSIZE, 1) && !process.mmap,
            "lab5 munmap: full cleanup");
+    unchanged(process.pgtbl, empty);
     uvm_destroy_pgtbl(process.pgtbl);pmem_free(tf, true);mycpu()->proc = NULL;
     printf("lab-5 kernel mmap PASS\n");
 }

@@ -139,6 +139,43 @@ static bool mapped_range(pgtbl_t root, uint64 begin, uint64 end)
     return true;
 }
 
+// 只检查解除范围涉及的子树，保留仍有映射的相邻分支及根页表。
+// vm_unmappages保留中间页的通用契约不变，由用户内存层负责收回空表。
+static bool prune_empty(pgtbl_t root, int level, uint64 first, uint64 last)
+{
+    if (level > 0)
+    {
+        uint64 low = VA_TO_VPN(first, level), high = VA_TO_VPN(last, level);
+        uint64 span = 1ul << VA_SHIFT(level);
+        for (uint64 i = low; i <= high; i++)
+        {
+            pte_t *entry = &root[i];
+            if (!(*entry & PTE_V) || !PTE_CHECK(*entry))
+                continue;
+            pgtbl_t child = (pgtbl_t)PTE_TO_PA(*entry);
+            if (prune_empty(child, level - 1, i == low ? first : 0,
+                            i == high ? last : span - 1))
+            {
+                *entry = 0;
+                sfence_vma();
+                pmem_free((uint64)child, true);
+            }
+        }
+    }
+    for (int i = 0; i < 512; i++)
+        if (root[i])
+            return false;
+    return true;
+}
+
+static void release_range(pgtbl_t root, uint64 begin, uint64 end)
+{
+    if (begin == end)
+        return;
+    vm_unmappages(root, begin, end - begin, true);
+    prune_empty(root, 2, begin, end - 1);
+}
+
 uint64 uvm_heap_grow(pgtbl_t root, uint64 top, uint32 len)
 {
     if (!root || top < USER_HEAP_BASE || top > MMAP_BEGIN || len > MMAP_BEGIN - top)
@@ -154,8 +191,7 @@ uint64 uvm_heap_ungrow(pgtbl_t root, uint64 top, uint32 len)
     uint64 next = top - len, begin = round_up(next), end = round_up(top);
     if (!mapped_range(root, begin, end))
         return 0;
-    if (begin < end)
-        vm_unmappages(root, begin, end - begin, true);
+    release_range(root, begin, end);
     return next;
 }
 
@@ -289,7 +325,7 @@ int uvm_munmap(uint64 begin, uint32 npages)
         if (!split)
             return -1;
     }
-    vm_unmappages(p->pgtbl, begin, len, true);
+    release_range(p->pgtbl, begin, end);
     mmap_region_t **link = &p->mmap;
     while ((r = *link) != NULL)
     {
