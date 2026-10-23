@@ -12,8 +12,11 @@
 - 缩堆和 munmap 同时回收解除范围内的空页表页；保留根页表、仍有映射的相邻分支及特殊映射，无须等进程退出才归还内核页。
 - 页表复制保留内容与权限，用户物理页独立；销毁统一回收用户页及页表，trapframe 由进程单独回收，trampoline 共享。用户故障后动态堆、栈和 mmap 资源全部回收，内核继续响应中断。
 - 实际启动核 `boot_hartid` 创建唯一用户进程，辅助核留在内核；UART 接收和全局 ticks 归属该启动核。RX 中断为 IER bit0，TX bit1 不开启。
+- 可选 `AEGIS=1`：Agent Group 保护原型，包含共享用户页预算、成员数上限、syscall允许集合与64事件审计环；默认关闭，不改变课程ABI。当前没有组级调度、用户态管理器或真实LLM运行能力。
 
 本阶段没有调度器、fork/wait/exec、文件系统及浮点上下文切换。页表复制供后续实验使用，不等于已经实现多进程。
+
+汇报与设计材料：[功能实现说明](docs/功能实现说明.md)（实现路径、边界、演示及后续依赖）、[竞赛参考与差异化路线](docs/竞赛参考与差异化路线.md)（2025获奖作品及借鉴来源）、[Agent验收记录](docs/AGENT_VALIDATION.md)。新增功能需同步维护实现说明。
 
 ## 构建与运行
 
@@ -44,6 +47,7 @@ VF2 生成 `target/vf2/kernel/kernel-vf2.elf` 与 `kernel-vf2.bin`；后者包�
 make test-lab5
 make test-lab4
 make test-lab3
+make test-agent
 ```
 
 `make test` 默认运行 Lab 5。分组定位：
@@ -55,6 +59,8 @@ python3 tests/test_lab5.py --group mmap
 python3 tests/test_lab5.py --group pagetable
 python3 tests/test_lab5.py --group platform
 ```
+
+`make test-agent` 检查组共享预算、heap/stack/mmap的配额与OOM回滚、真实ecall权限拒绝、预算复用、审计覆盖及故障清理；另验证开启Aegis的Lab5负载和同目录开关切换。专用镜像配置为4页预算并拒绝copyout；普通 `make run AEGIS=1` 使用64页、1成员、全部课程服务权限。用户目前不能修改这些内核策略。性能开销尚未测量。
 
 | 验收 | 内容 |
 | --- | --- |
