@@ -6,9 +6,10 @@ import subprocess
 
 
 def main():
-    for audit in [1, 0]:
-        name = f'aegis-protection-audit{audit}'
-        target = lab5.build(name, AEGIS=1, AEGIS_AUDIT=audit, AGENT_TEST=1, SCENARIO=30)
+    for audit, success in [(1, 1), (1, 0), (0, 1)]:
+        name = f'aegis-protection-audit{audit}' + ('-errors' if not success else '')
+        target = lab5.build(name, AEGIS=1, AEGIS_AUDIT=audit, AEGIS_AUDIT_SUCCESS=success,
+                            AGENT_TEST=1, SCENARIO=30)
         markers = [
         b'aegis kernel protection PASS', b'aegis capability deny PASS',
         b'aegis concurrent budget PASS',
@@ -45,6 +46,7 @@ def main():
     for options in [['AEGIS=2'], ['AEGIS='], ['AEGIS=0 1'], ['AGENT_TEST=1'],
                     ['AEGIS_AUDIT=1'], ['AEGIS_AUDIT='], ['AEGIS=1', 'AEGIS_AUDIT=2'],
                     ['AGENT_BENCH=1', 'LAB5_TEST=1'], ['AGENT_TEST=2'], ['AGENT_BENCH='],
+                    ['AEGIS_AUDIT_SUCCESS=2'], ['AEGIS_AUDIT_SUCCESS='],
                     ['AEGIS=1', 'AGENT_TEST=1', 'AGENT_BENCH=1']]:
         result = subprocess.run(['make', '--no-print-directory', 'build', *options], cwd=lab5.ROOT,
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -55,6 +57,8 @@ def main():
                    'dual_hart_quota_barrier_and_churn': 'PASS',
                    'stats_and_monotonic_policy_restriction': 'PASS',
                    'heap_mmap_stack_quota_and_oom_rollback': 'PASS',
+                   'quota_vs_allocation_failure_reasons': 'PASS',
+                   'filtered_success_flood_preserves_denial': 'PASS',
                    'actual_ecall_permission_denial_and_quota_reuse': 'PASS',
                    'audit_order_overwrite_and_loss': 'PASS',
                    'fault_cleanup_and_continued_ticks': 'PASS',
@@ -63,6 +67,7 @@ def main():
                    'rejected_build_options': 'PASS'},
         'performance_overhead': 'NOT_MEASURED',
         'logs': ['aegis-protection-audit1/aegis-protection-audit1.log',
+                 'aegis-protection-audit1-errors/aegis-protection-audit1-errors.log',
                  'aegis-protection-audit0/aegis-protection-audit0.log', 'aegis-lab5/aegis-lab5.log',
                  'aegis-toggle/aegis-baseline.log', 'aegis-toggle/aegis-default.log']}
     (lab5.OUT / 'aegis-summary.json').write_text(json.dumps(report, indent=2) + '\n')

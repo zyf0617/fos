@@ -120,6 +120,7 @@ static int allocate_range(pgtbl_t root, uint64 begin, uint64 end, int perm)
     {
 #if AEGIS
         agent_uncharge(root, charged);
+        agent_allocation_failed(root, AGENT_ALLOC_STAGE);
 #endif
         return -1;
     }
@@ -133,6 +134,7 @@ static int allocate_range(pgtbl_t root, uint64 begin, uint64 end, int perm)
             uvm_destroy_pgtbl(stage);
 #if AEGIS
             agent_uncharge(root, charged);
+            agent_allocation_failed(root, page ? AGENT_ALLOC_TABLE : AGENT_ALLOC_DATA);
 #endif
             return -1;
         }

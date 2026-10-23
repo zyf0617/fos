@@ -18,6 +18,8 @@
 
 汇报与设计材料：[功能实现说明](docs/功能实现说明.md)（实现路径、边界、演示及后续依赖）、[竞赛参考与差异化路线](docs/竞赛参考与差异化路线.md)（2025获奖作品及借鉴来源）、[Agent验收记录](docs/AGENT_VALIDATION.md)。新增功能需同步维护实现说明。
 
+研究与选型：[近期研究与成熟技术](docs/研究与技术选型.md)，含2025–2026论文、Linux/FreeBSD/运行时机制、阅读深度、采用顺序及实现映射。本轮应用分类分配失败事件与成功事件过滤。
+
 ## 构建与运行
 
 需要 RISC-V GCC/binutils、make、xxd、Python 3 和 QEMU。macOS 可使用原生工具；Ubuntu 解包工具链先执行：
@@ -62,7 +64,7 @@ python3 tests/test_lab5.py --group platform
 
 `make test-agent` 检查组共享预算、双hart单页预算竞争、只收紧策略与一致快照、heap/stack/mmap的配额与OOM回滚、真实ecall权限拒绝、预算复用、审计覆盖及故障清理；另验证关闭审计时保护仍有效、开启Aegis的Lab5负载和同目录开关切换。专用镜像配置为4页预算并拒绝copyout；普通 `make run AEGIS=1` 使用64页、1成员、全部课程服务权限。用户目前不能修改这些内核策略。
 
-`AEGIS_AUDIT=0` 可独立关闭事件采集并保留保护，默认等于 `AEGIS`。`make bench-agent` 比较基线、仅保护、保护加审计三种配置的相同真实ecall用户负载，保存原始批次和环境。已保存的[QEMU微基准结果](docs/benchmarks/agent/2026-10-23/README.md)用于描述模拟环境下的成本，不能推导为实板或真实Agent性能。
+`AEGIS_AUDIT=0` 可独立关闭事件采集并保留保护，默认等于 `AEGIS`；`AEGIS_AUDIT_SUCCESS=0` 只过滤成功syscall事件，保留拒绝、故障和生命周期。组快照区分预算拒绝与实际分配失败，审计快照区分过滤与覆盖。`make bench-agent` 使用相同用户镜像比较基线、仅保护、全量审计和过滤审计四配置。已保存的[本轮四配置结果](docs/benchmarks/agent/2026-10-23-selected/README.md)与[历史三配置数据](docs/benchmarks/agent/2026-10-23/README.md)分别保留；这些QEMU数据不能推导为实板或真实Agent性能。
 
 | 验收 | 内容 |
 | --- | --- |

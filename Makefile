@@ -15,6 +15,7 @@ include common.mk
 BOOT_USER ?= 1
 AEGIS ?= 0
 AEGIS_AUDIT ?= $(AEGIS)
+AEGIS_AUDIT_SUCCESS ?= 1
 AGENT_TEST ?= 0
 AGENT_BENCH ?= 0
 ifneq ($(AGENT_TEST),0)
@@ -40,7 +41,12 @@ ifneq ($(AEGIS),1)
 $(error AEGIS_AUDIT=1 requires AEGIS=1)
 endif
 endif
-CFLAGS += -DAEGIS=$(AEGIS) -DAEGIS_AUDIT=$(AEGIS_AUDIT)
+ifneq ($(AEGIS_AUDIT_SUCCESS),0)
+ifneq ($(AEGIS_AUDIT_SUCCESS),1)
+$(error AEGIS_AUDIT_SUCCESS must be 0 or 1)
+endif
+endif
+CFLAGS += -DAEGIS=$(AEGIS) -DAEGIS_AUDIT=$(AEGIS_AUDIT) -DAEGIS_AUDIT_SUCCESS=$(AEGIS_AUDIT_SUCCESS)
 ifeq ($(AGENT_TEST),1)
 ifneq ($(AEGIS),1)
 $(error AGENT_TEST=1 requires AEGIS=1)

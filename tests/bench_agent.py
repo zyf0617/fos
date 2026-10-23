@@ -18,7 +18,8 @@ import test_lab5 as lab5
 
 MODES = {'baseline': {'AEGIS': 0},
          'enforce': {'AEGIS': 1, 'AEGIS_AUDIT': 0},
-         'audit': {'AEGIS': 1, 'AEGIS_AUDIT': 1}}
+         'audit': {'AEGIS': 1, 'AEGIS_AUDIT': 1},
+         'filtered': {'AEGIS': 1, 'AEGIS_AUDIT': 1, 'AEGIS_AUDIT_SUCCESS': 0}}
 PATTERN = re.compile(rb'aegis bench workload=(query|map-cycle) sample=(\d+) ticks=(\d+) iterations=(\d+)')
 
 
@@ -87,7 +88,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     targets = {name: lab5.build(f'bench-{name}', AGENT_BENCH=1, **options)
                for name, options in MODES.items()}
-    # 三模式用户程序必须完全一致，否则不是同负载比较。
+    # 所有模式的用户程序必须完全一致，否则不是同负载比较。
     users = [(target / 'user/initcode.bin').read_bytes() for target in targets.values()]
     assert all(user == users[0] for user in users)
     records, order = [], []
@@ -135,10 +136,11 @@ def main():
               'limitations': ['Host scheduling and QEMU timer noise affect results.',
                               'Samples are batch means; no per-syscall tail-latency inference.',
                               'Map-cycle is one mmap+munmap pair, not one syscall.',
-                              'No CPU fairness, real Agent throughput, or VF2 result is measured.']}
+                              'No CPU fairness, real Agent throughput, or VF2 result is measured.',
+                              'These successful-operation workloads favor filtering; denial storms are not timed.']}
     (out / 'results.json').write_text(json.dumps(report, indent=2) + '\n')
     lines = ['# Agent protection QEMU microbenchmark', '',
-             'Same user image; 3 modes; median of independent boot medians. Guest time ticks at 10 MHz.', '',
+             f'Same user image; {len(MODES)} modes; median of independent boot medians. Guest time ticks at 10 MHz.', '',
              '| Workload | Mode | ticks / operation | boot median range | vs baseline |', '| --- | --- | ---: | ---: | ---: |']
     for s in summaries:
         lines.append(f"| {s['workload']} | {s['mode']} | {s['median_boot_median_ticks']:.3f} | {s['min_boot_median_ticks']:.3f}–{s['max_boot_median_ticks']:.3f} | {s['change_vs_baseline_percent']:+.1f}% |")

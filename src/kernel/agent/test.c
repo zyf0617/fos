@@ -73,6 +73,29 @@ static uint64 hash_tree(pgtbl_t root, int level)
     return value;
 }
 
+static void check_allocation_event(proc_t *p, uint64 failures, uint64 quota, int point)
+{
+    agent_stats_t stats;
+    agent_snapshot(p->agent, &stats);
+    assert(stats.allocation_failed == failures + 1 && stats.quota_denied == quota,
+           "agent test: allocation and quota events confused");
+#if AEGIS_AUDIT
+    agent_audit_stats_t audit;
+    agent_audit_snapshot(&audit);
+    agent_event_t event;
+    uint64 lost;
+    assert(audit.recorded && agent_audit_read(audit.recorded - 1, &event, 1, &lost) == 1 &&
+           !lost && event.kind == AGENT_ALLOC_FAIL && event.result == (uint64)-1 &&
+           event.pages == stats.pages && event.detail >= AGENT_ALLOC_STAGE &&
+           event.detail <= AGENT_ALLOC_TABLE,
+           "agent test: missing allocation reason after rollback");
+    if (point < 3)
+        assert(event.detail == (uint64)point + 1, "agent test: wrong allocation failure reason");
+#else
+    (void)point;
+#endif
+}
+
 void agent_self_test(void)
 {
     uint32 kernel = pmem_available(true), user = pmem_available(false), nodes = mmap_available();
@@ -105,9 +128,12 @@ void agent_self_test(void)
     bool completed = false;
     for (int n = 0; n < 16; n++)
     {
+        uint64 failures = group.allocation_failed, quota = group.quota_denied;
         pmem_test_fail_after(n);
         uint64 top = uvm_heap_grow(p.pgtbl, USER_HEAP_BASE, 3 * PGSIZE);
         pmem_test_fail_after(-1);
+        if (!top) check_allocation_event(&p, failures, quota, n);
+        else assert(group.allocation_failed == failures, "agent test: successful alloc counted as failure");
         if (top)
         {
             assert(group.pages == 3 && p.agent_pages == 3, "agent test: heap charge");
@@ -121,18 +147,21 @@ void agent_self_test(void)
         if (completed) break;
     }
     assert(completed, "agent test: no successful heap transaction");
+    uint64 failed_before_quota = group.allocation_failed;
     assert(uvm_heap_grow(p.pgtbl, USER_HEAP_BASE, 5 * PGSIZE) == 0 &&
-           !group.pages && hash_tree(p.pgtbl, 2) == before,
+           !group.pages && hash_tree(p.pgtbl, 2) == before && group.allocation_failed == failed_before_quota,
            "agent test: heap quota");
 
     completed = false;
     uint64 mapping = 0;
     for (int n = 0; n < 16; n++)
     {
+        uint64 failures = group.allocation_failed, quota = group.quota_denied;
         pmem_test_fail_after(n);
         mapping = uvm_mmap(0, 2, PTE_R | PTE_W);
         pmem_test_fail_after(-1);
         if (mapping) { completed = true; break; }
+        check_allocation_event(&p, failures, quota, n);
         assert(!group.pages && !p.agent_pages && !p.mmap &&
                hash_tree(p.pgtbl, 2) == before && pmem_available(true) == k &&
                pmem_available(false) == u && mmap_available() == nodes,
@@ -153,10 +182,12 @@ void agent_self_test(void)
     completed = false;
     for (int n = 0; n < 16; n++)
     {
+        uint64 failures = group.allocation_failed, quota = group.quota_denied;
         pmem_test_fail_after(n);
         int64 pages = uvm_ustack_grow(p.pgtbl, 1, USER_STACK_TOP - 2 * PGSIZE);
         pmem_test_fail_after(-1);
         if (pages == 2) { completed = true; break; }
+        check_allocation_event(&p, failures, quota, n < 2 ? n : 3);
         assert(group.pages == 3 && p.agent_pages == 3 && hash_tree(p.pgtbl, 2) == before &&
                pmem_available(true) == k && pmem_available(false) == u,
                "agent test: stack OOM leaked budget");
@@ -176,8 +207,27 @@ void agent_self_test(void)
            "agent test: mmap release");
 
 #if AEGIS_AUDIT
+    agent_audit_stats_t audit_before, audit_after;
+    agent_record(&p, AGENT_CAP_DENY, SYS_copyout, (uint64)-1);
+    agent_audit_snapshot(&audit_before);
     for (int i = 0; i < AGENT_AUDIT_CAPACITY + 6; i++)
-        agent_record(&p, AGENT_SYSCALL, i, 0);
+        agent_record(&p, AGENT_SYSCALL, SYS_brk, 0);
+    agent_audit_snapshot(&audit_after);
+#if AEGIS_AUDIT_SUCCESS
+    assert(audit_after.recorded == audit_before.recorded + AGENT_AUDIT_CAPACITY + 6 &&
+           audit_after.filtered == 0, "agent test: full trace filtered records");
+#else
+    assert(audit_after.recorded == audit_before.recorded &&
+           audit_after.filtered == audit_before.filtered + AGENT_AUDIT_CAPACITY + 6 &&
+           audit_after.overwritten == audit_before.overwritten,
+           "agent test: filtered success consumed ring");
+    uint64 preserved_lost;
+    assert(agent_audit_read(audit_before.recorded - 1, captured, 1, &preserved_lost) == 1 &&
+           !preserved_lost && captured[0].kind == AGENT_CAP_DENY,
+           "agent test: successful flood erased denial");
+#endif
+    for (int i = 0; i < AGENT_AUDIT_CAPACITY + 6; i++)
+        agent_record(&p, AGENT_CAP_DENY, i, (uint64)-1);
     uint64 lost;
     uint32 count = agent_audit_read(0, captured, AGENT_AUDIT_CAPACITY, &lost);
     assert(count == AGENT_AUDIT_CAPACITY && lost >= 6 && captured[0].sequence == lost + 1,
@@ -191,8 +241,12 @@ void agent_self_test(void)
            "agent test: audit boundaries");
 #else
     uint64 lost = 99;
+    agent_audit_stats_t audit;
+    agent_audit_snapshot(&audit);
     assert(agent_audit_read(0, NULL, 0, &lost) == 0 && !lost,
            "agent test: disabled audit is not empty");
+    assert(!audit.recorded && !audit.filtered && !audit.overwritten,
+           "agent test: disabled audit counters");
 #endif
     agent_stats_t stats;
     agent_snapshot(&group, &stats);

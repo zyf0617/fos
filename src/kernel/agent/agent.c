@@ -7,6 +7,9 @@ static agent_group_t boot_group;
 static spinlock_t audit_lock;
 static agent_event_t events[AGENT_AUDIT_CAPACITY];
 static uint64 sequence;
+#if !AEGIS_AUDIT_SUCCESS
+static uint64 filtered;
+#endif
 #endif
 
 void agent_group_init(agent_group_t *g, uint64 id, uint64 pages,
@@ -26,6 +29,9 @@ void agent_init(void)
 #if AEGIS_AUDIT
     spinlock_init(&audit_lock, "agent.audit");
     sequence = 0;
+#if !AEGIS_AUDIT_SUCCESS
+    filtered = 0;
+#endif
 #endif
 #ifdef AGENT_TEST
     agent_group_init(&boot_group, 1, 4, 1, AGENT_SYSCALL_MASK & ~(1ul << SYS_copyout));
@@ -39,6 +45,15 @@ void agent_record(proc_t *p, uint64 kind, uint64 detail, uint64 result)
 #if AEGIS_AUDIT
     if (!p || !p->agent)
         return;
+#if !AEGIS_AUDIT_SUCCESS
+    // Concept: kernel event filtering (docs.kernel.org/trace/events.html).
+    // 只过滤成功完成事件；拒绝、分配失败、生命周期和故障仍入环。
+    if (kind == AGENT_SYSCALL && result == 0)
+    {
+        __atomic_fetch_add(&filtered, 1, __ATOMIC_RELAXED);
+        return;
+    }
+#endif
     agent_group_t *g = p->agent;
     spinlock_acquire(&g->lock);
     uint64 pages = g->pages, id = g->id;
@@ -59,7 +74,7 @@ void agent_snapshot(agent_group_t *g, agent_stats_t *out)
     spinlock_acquire(&g->lock);
     *out = (agent_stats_t){g->id, g->page_limit, g->pages, g->peak_pages,
                           g->process_limit, g->processes, g->syscall_mask,
-                          g->quota_denied, g->capability_denied};
+                          g->quota_denied, g->capability_denied, g->allocation_failed};
     spinlock_release(&g->lock);
 }
 
@@ -159,6 +174,35 @@ void agent_uncharge(pgtbl_t root, uint64 pages)
     p->agent_pages -= pages;
     g->pages -= pages;
     spinlock_release(&g->lock);
+}
+
+void agent_allocation_failed(pgtbl_t root, uint64 reason)
+{
+    proc_t *p = myproc();
+    if (!p || p->pgtbl != root || !p->agent)
+        return;
+    assert(reason >= AGENT_ALLOC_STAGE && reason <= AGENT_ALLOC_TABLE,
+           "agent_allocation_failed: invalid reason");
+    agent_group_t *g = p->agent;
+    spinlock_acquire(&g->lock);
+    g->allocation_failed++;
+    spinlock_release(&g->lock);
+    agent_record(p, AGENT_ALLOC_FAIL, reason, (uint64)-1);
+}
+
+void agent_audit_snapshot(agent_audit_stats_t *out)
+{
+    assert(out != NULL, "agent_audit_snapshot: NULL output");
+    *out = (agent_audit_stats_t){0};
+#if AEGIS_AUDIT
+    spinlock_acquire(&audit_lock);
+    out->recorded = sequence;
+    out->overwritten = sequence > AGENT_AUDIT_CAPACITY ? sequence - AGENT_AUDIT_CAPACITY : 0;
+    spinlock_release(&audit_lock);
+#if !AEGIS_AUDIT_SUCCESS
+    out->filtered = __atomic_load_n(&filtered, __ATOMIC_RELAXED);
+#endif
+#endif
 }
 
 bool agent_allowed(proc_t *p, uint64 number)
